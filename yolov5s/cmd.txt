@@ -1,0 +1,13 @@
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/rock/ai-sdk/viplite-tina/lib/aarch64-none-linux-gnu/v2.0 # NPU_SW_VERSION
+
+cd $INSTALL_PREFIX/etc/npu/yolov5
+# ./yolov5 nbg_model input_picture
+./yolov5 ./model/yolov5.nb ./input_data/dog.jpg
+
+(.venv) rock@radxa-cubie-a7a:~/ai-sdk/examples/yolov5/etc/npu/yolov5$ ./yolov5 ./model/network_binary.nb ./input_data/dog.jpg
+./yolov5 nbg input
+
+DISPLAY=:0 gst-launch-1.0 v4l2src device=/dev/video1 en-awisp=1 en-largemode=1 ! video/x-raw,format=NV12,width=3840,height=2160,framerate=24/1  ! xvimagesink
+
+
+

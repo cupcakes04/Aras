@@ -1,0 +1,26 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# KITTI dataset by Karlsruhe Institute of Technology and Toyota Technological Institute at Chicago
+# Documentation: https://docs.ultralytics.com/datasets/detect/kitti/
+# Example usage: yolo train data=kitti.yaml
+# parent
+# ├── ultralytics
+# └── datasets
+#     └── kitti ← downloads here (390.5 MB)
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: D:\DATASETS\cars
+train: images/train
+val: images/val
+
+names:
+  0: car
+  1: van
+  2: truck
+  3: pedestrian
+  4: person_sitting
+  5: cyclist
+  6: tram
+  7: misc
+
+# https://docs.ultralytics.com/datasets/detect/kitti/#dataset-yaml
