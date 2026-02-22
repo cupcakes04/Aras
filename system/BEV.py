@@ -146,27 +146,45 @@ class BEV:
         Convert latest camera detections to flat-plane world (x, y) metres.
         Uses bottom-centre of each bbox as the ground contact point.
 
-        Returns list of dict with all original fields plus 'world_x', 'world_y'.
+        Returns dict with 'cars' and 'signs' keys, each containing list of detections
+        with 'world_x', 'world_y' added.
         """
         if not self._camera.history['values']:
-            return []
+            return {'cars': [], 'signs': []}
 
         roll, pitch = self._imu_tilt(self._imu.history['values'])
-
-        detections = self._camera.history['values'][-1]
-        results = []
-        for det in detections:
+        latest = self._camera.history['values'][-1]
+        
+        results = {'cars': [], 'signs': []}
+        
+        # Process cars
+        for det in latest.get('cars', []):
             x1, y1, x2, y2 = det['bbox']
             u = (x1 + x2) / 2.0   # horizontal centre
             v = float(y2)          # bottom edge -> ground contact point
 
             wx, wy = self._pixel_to_world(u, v, roll, pitch)
 
-            results.append({
+            results['cars'].append({
                 **det,
                 'world_x': float(wx),
                 'world_y': float(wy),
             })
+        
+        # Process signs
+        for det in latest.get('signs', []):
+            x1, y1, x2, y2 = det['bbox']
+            u = (x1 + x2) / 2.0   # horizontal centre
+            v = float(y2)          # bottom edge -> ground contact point
+
+            wx, wy = self._pixel_to_world(u, v, roll, pitch)
+
+            results['signs'].append({
+                **det,
+                'world_x': float(wx),
+                'world_y': float(wy),
+            })
+            
         return results
 
     def get_radar_world_points(self, mode: Literal['front', 'back']):

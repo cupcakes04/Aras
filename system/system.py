@@ -3,6 +3,9 @@ import math
 from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker
 from BEV import BEV
 from tracker import TrackManager
+from app.visualisation import Visualisation
+
+# https://github.com/cupcakes04/Aras
 
 class System:
 
@@ -27,23 +30,28 @@ class System:
             radar_back=self.radar_back,
 
             # Replace with calibrated values
-            image_pts=[[120, 80], [520, 80], [520, 400], [120, 400]],
-            world_pts=[[-1.5, 2.5], [1.5, 2.5], [1.5, -2.5], [-1.5, -2.5]],
+            image_pts=[[10, 20], [60, 20], [60, 40], [10, 40]],  # bbox corners
+            world_pts=[[0, 2], [0.5, 2], [0.5, 1.5], [0, 1.5]],  # real positions in metres
             
             # Example for 640x480 camera
-            camera_matrix=[[500, 0, 320],   # fx, 0, cx (optical center x)
-                        [0, 500, 240],   # 0, fy, cy (optical center y)
+            camera_matrix=[[1, 0, 1],   # fx, 0, cx (optical center x)
+                        [0, 1, 1],   # 0, fy, cy (optical center y)
                         [0, 0, 1]]
         )
 
         # Initialize tracker
         self.tracker = TrackManager(dt=0.05, max_distance=2.0)
 
+        # Initialize visualization
+        self.visualisation = Visualisation(self, port=8765)
+
         # Initialise outputs
         self._actuator_cmd: bool  = True
         self._vibrator_left_cmd: float = 0.0
         self._vibrator_right_cmd: float = 0.0
         self._speaker_cmd: tuple[str | None, float] = (None, 0.0)
+        self.objects: list = []
+        self.traffic_signs: list = []
 
     async def report(self):
         print("\n" + "="*60)
@@ -82,21 +90,22 @@ class System:
     # |----------------------- Core Logic --------------------------|
     # |-------------------------------------------------------------|
 
-    def generate_world_objects(self):
+    async def generate_world_objects(self):
         """
         Generate unified object list from camera and radar with two-level fusion:
         1. Radar-confirmed objects (high confidence)
         2. Camera-only objects (lower confidence)
         
-        Returns list of dicts with:
-        - id: unique identifier
-        - name: object class name
-        - world_x, world_y: position in metres
-        - confidence: 0.0-1.0 (derived from dist_res for radar, fixed for camera-only)
-        - cam_only: bool (True if no radar confirmation)
+        Also processes traffic signs separately (camera-only, no radar fusion).
+        
+        Updates:
+        - self.objects: list of tracked objects (cars, pedestrians, etc.)
+        - self.traffic_signs: list of traffic sign detections (camera-only)
         """
         results = self.bev.get_world_points()
-        camera_dets = results['camera']
+        camera_results = results['camera']
+        camera_objs = camera_results.get('objs', [])
+        camera_signs = camera_results.get('signs', [])
         radar_front = results['radar_front']
         radar_back = results['radar_back']
         
@@ -151,7 +160,7 @@ class System:
             best_match_idx = None
             best_dist = 1.0  # matching threshold in metres
 
-            for idx, cam in enumerate(camera_dets):
+            for idx, cam in enumerate(camera_objs):
                 if idx in matched_cam_indices:
                     continue
                 cx, cy = cam['world_x'], cam['world_y']
@@ -193,7 +202,7 @@ class System:
                 matched_cam_indices.add(best_match_idx)
 
         # Level 2: Camera-only objects (no radar confirmation)
-        for idx, cam in enumerate(camera_dets):
+        for idx, cam in enumerate(camera_objs):
             if idx in matched_cam_indices:
                 continue  # Already matched with radar
             
@@ -208,16 +217,31 @@ class System:
             objects.append(obj)
             obj_id += 1
 
-        return objects
+        self.objects = objects
+        
+        # Process traffic signs separately (camera-only, no radar fusion)
+        signs = []
+        sign_id = 0
+        for sign in camera_signs:
+            sign_obj = {
+                'id': sign_id,
+                'name': sign.get('name', 'unknown_sign'),
+                'world_x': sign['world_x'],
+                'world_y': sign['world_y'],
+                'confidence': 0.7,  # Fixed confidence for signs
+            }
+            signs.append(sign_obj)
+            sign_id += 1
+        
+        self.traffic_signs = signs
 
     async def collision_detector(self):
         """
         Detect front/side collision threats using tracked objects.
         """
         # Get raw detections and update tracker
-        detections = self.generate_world_objects()
-        tracked_objects = self.tracker.update(detections)
-        
+        tracked_objects = self.tracker.update(self.objects)
+
         # Collision zones (bike-centric frame: +y forward, +x right)
         # Front: y > 0.5, |x| < 1.0
         # Left:  x < -0.3, y > 0
@@ -291,6 +315,8 @@ class System:
     async def run(self):
         """Spawn all sensor, actuator and BEV tasks then run indefinitely."""
         tasks = [
+            asyncio.create_task(system.visualisation.start(period=0.1)),
+
             # Inputs
             self.assign_task(self.camera.read, period=0.025),
             self.assign_task(self.imu.read, period=0.01),
@@ -298,6 +324,7 @@ class System:
             self.assign_task(self.radar_back.read, period=0.05),
 
             # Processing
+            self.assign_task(self.generate_world_objects, period=0.05),
             self.assign_task(self.collision_detector, period=0.05),
             self.assign_task(self.report, period=1.0),
 
