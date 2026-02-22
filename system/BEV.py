@@ -2,7 +2,8 @@ import asyncio
 import math
 import numpy as np
 import cv2
-
+from typing import Literal
+from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker
 
 class BEV:
     """
@@ -37,7 +38,7 @@ class BEV:
       - Radar : rotate the reported beam direction onto the flat ground plane.
     """
 
-    def __init__(self, camera, imu, radar,
+    def __init__(self, camera: Camera, imu: IMU, radar_front: Radar, radar_back: Radar,
                  image_pts: np.ndarray, world_pts: np.ndarray,
                  camera_matrix: np.ndarray,
                  scale_mm_to_m: float = 0.001):
@@ -52,9 +53,10 @@ class BEV:
         camera_matrix: (3, 3) float64 - camera intrinsic matrix
         scale_mm_to_m: radar unit -> metres conversion (default 0.001)
         """
-        self._camera = camera
-        self._imu    = imu
-        self._radar  = radar
+        self._camera: Camera = camera
+        self._imu: IMU = imu
+        self._radar_front: Radar = radar_front
+        self._radar_back: Radar = radar_back
 
         image_pts = np.asarray(image_pts, dtype=np.float32)
         world_pts = np.asarray(world_pts, dtype=np.float32)
@@ -167,23 +169,33 @@ class BEV:
             })
         return results
 
-    def get_radar_world_points(self):
+    def get_radar_world_points(self, mode: Literal['front', 'back']):
         """
         Convert latest radar detections (mm, already BEV) to flat-plane world
         (x, y) metres, corrected for roll/pitch tilt.
+        
+        Front radar: +y forward
+        Back radar:  -y backward (y values negated)
 
         Returns list of dict with all original fields plus 'world_x', 'world_y'.
         """
-        if not self._radar.history['values']:
+        if mode == 'front':
+            history = self._radar_front.history['values']
+            y_sign = 1.0  # front is positive y
+        elif mode == 'back':
+            history = self._radar_back.history['values']
+            y_sign = -1.0  # back is negative y
+            
+        if not history:
             return []
 
         roll, pitch = self._imu_tilt(self._imu.history['values'])
 
-        targets = self._radar.history['values'][-1]
+        targets = history[-1]
         results = []
         for t in targets:
             x_m = t['x'] * self._scale
-            y_m = t['y'] * self._scale
+            y_m = t['y'] * self._scale * y_sign  # apply direction
 
             wx, wy = self._radar_tilt_correction(x_m, y_m, roll, pitch)
 
@@ -196,12 +208,14 @@ class BEV:
 
     def get_world_points(self):
         """
-        Returns dict with keys 'camera' and 'radar', each a list of dicts
-        with 'world_x' and 'world_y' in metres on the flat ground plane.
+        Returns dict with keys 'camera', 'radar_front', 'radar_back',
+        each a list of dicts with 'world_x' and 'world_y' in metres
+        on the flat ground plane.
         """
         return {
-            'camera': self.get_camera_world_points(),
-            'radar':  self.get_radar_world_points(),
+            'camera':      self.get_camera_world_points(),
+            'radar_front': self.get_radar_world_points('front'),
+            'radar_back':  self.get_radar_world_points('back'),
         }
 
 # |-------------------------------------------------------------|
