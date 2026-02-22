@@ -2,8 +2,9 @@ import asyncio
 import random
 import time
 from collections import deque
+from .history import History
 
-class IMU:
+class IMU(History):
     """
     IMU
     - functions in reading frames 
@@ -29,7 +30,7 @@ class IMU:
         self.history['ticks'] = deque(maxlen=max_history)
         self.setup(**kwargs)
         
-    def setup(**kwargs):
+    def setup(self, **kwargs):
         # Implement Setup here
         pass
         
@@ -41,5 +42,4 @@ class IMU:
         }
 
         # 2. Record the action in history
-        self.history['values'].append(value)
-        self.history['ticks'].append(time.time())
+        self.save_history(value)

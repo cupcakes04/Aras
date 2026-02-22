@@ -2,19 +2,16 @@ import asyncio
 import random
 import time
 from collections import deque
+from .history import History
 
-class Actuator:
+class Actuator(History):
     """Linear actuator, functions in extend as True/False only"""
     
-    def __init__(self, max_history=10, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        self.history = {}
-        self.history['values'] = deque(maxlen=max_history)
-        self.history['ticks'] = deque(maxlen=max_history)
         self.setup(**kwargs)
         
-    def setup(**kwargs):
+    def setup(self, **kwargs):
         # Implement Setup here
         pass
         
@@ -22,5 +19,4 @@ class Actuator:
         # 1. Perform the physical action (placeholder)
         
         # 2. Record the action in history
-        self.history['values'].append(value)
-        self.history['ticks'].append(time.time())
+        self.save_history(value)

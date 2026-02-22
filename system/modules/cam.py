@@ -2,8 +2,9 @@ import asyncio
 import random
 import time
 from collections import deque
+from .history import History
 
-class Camera:
+class Camera(History):
     """
     Camera
     - functions in reading frames 
@@ -19,15 +20,23 @@ class Camera:
     ```
     """
 
-    def __init__(self, max_history=10, **kwargs):
-        super().__init__(**kwargs)
+    
+    class_map = {
+        0: 'car',
+        1: 'van',
+        2: 'truck',
+        3: 'pedestrian',
+        4: 'person_sitting',
+        5: 'cyclist',
+        6: 'tram',
+        7: 'misc',
+    }
 
-        self.history = {}
-        self.history['values'] = deque(maxlen=max_history)
-        self.history['ticks'] = deque(maxlen=max_history)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.setup(**kwargs)
         
-    def setup(**kwargs):
+    def setup(self, **kwargs):
         # Implement Setup here
         pass
         
@@ -39,5 +48,4 @@ class Camera:
         ]
 
         # 2. Record the action in history
-        self.history['values'].append(value)
-        self.history['ticks'].append(time.time())
+        self.save_history(value)

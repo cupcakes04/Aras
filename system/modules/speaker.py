@@ -2,23 +2,20 @@ import asyncio
 import random
 import time
 from collections import deque
+from .history import History
 
-class Speaker:
+class Speaker(History):
     """Speaker, 
     data in:
         - str of characters (not sure, maybe a list of stuff idk)
         - 0.0~1.0 signal strength, normalised
     """
     
-    def __init__(self, max_history=10, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        self.history = {}
-        self.history['values'] = deque(maxlen=max_history)
-        self.history['ticks'] = deque(maxlen=max_history)
         self.setup(**kwargs)
         
-    def setup(**kwargs):
+    def setup(self, **kwargs):
         # Implement Setup here
         pass
         
@@ -26,5 +23,4 @@ class Speaker:
         # 1. Perform the physical action (placeholder)
         
         # 2. Record the action in history
-        self.history['values'].append(value)
-        self.history['ticks'].append(time.time())
+        self.save_history(value)
