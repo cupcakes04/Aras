@@ -168,6 +168,89 @@
             border: 1px solid #f44336;
             color: #f44336;
         }
+        
+        #collision-warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.9);
+            padding: 30px 50px;
+            border-radius: 12px;
+            border: 3px solid #ff0000;
+            font-size: 32px;
+            font-weight: bold;
+            color: #fff;
+            text-align: center;
+            display: none;
+            animation: pulse 0.5s infinite alternate;
+            z-index: 1000;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+        }
+        
+        @keyframes pulse {
+            from { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+        }
+        
+        #collision-indicators {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+        }
+        
+        .collision-indicator {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(100, 100, 100, 0.3);
+            border: 3px solid #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #888;
+            transition: all 0.3s;
+        }
+        
+        .collision-indicator.active {
+            background: rgba(255, 0, 0, 0.8);
+            border-color: #ff0000;
+            color: #fff;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+            animation: vibrate 0.1s infinite;
+        }
+        
+        @keyframes vibrate {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(-2px, 2px); }
+            50% { transform: translate(2px, -2px); }
+            75% { transform: translate(-2px, -2px); }
+        }
+        
+        .collision-info {
+            position: absolute;
+            bottom: 130px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            font-size: 14px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            display: none;
+        }
+        
+        .collision-info.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -175,6 +258,27 @@
     
     <div class="connection-status disconnected" id="connection-status">
         ● DISCONNECTED
+    </div>
+    
+    <div id="collision-warning">
+        ⚠️ COLLISION WARNING ⚠️
+    </div>
+    
+    <div class="collision-info" id="collision-info">
+        <div id="collision-distance"></div>
+        <div id="collision-confidence"></div>
+    </div>
+    
+    <div id="collision-indicators">
+        <div class="collision-indicator" id="indicator-left">
+            LEFT
+        </div>
+        <div class="collision-indicator" id="indicator-front">
+            FRONT
+        </div>
+        <div class="collision-indicator" id="indicator-right">
+            RIGHT
+        </div>
     </div>
     
     <div id="info-panel">
@@ -613,6 +717,57 @@
                 });
             }
         }
+        
+        // Update collision warning UI
+        function updateCollisionWarning(collision) {
+            const warningEl = document.getElementById('collision-warning');
+            const infoEl = document.getElementById('collision-info');
+            const distanceEl = document.getElementById('collision-distance');
+            const confidenceEl = document.getElementById('collision-confidence');
+            const leftIndicator = document.getElementById('indicator-left');
+            const frontIndicator = document.getElementById('indicator-front');
+            const rightIndicator = document.getElementById('indicator-right');
+            
+            // Update front threat
+            if (collision.front_threat) {
+                warningEl.style.display = 'block';
+                infoEl.classList.add('active');
+                frontIndicator.classList.add('active');
+                
+                if (collision.closest_front_dist !== null) {
+                    distanceEl.textContent = `Distance: ${collision.closest_front_dist.toFixed(2)}m`;
+                    confidenceEl.textContent = `Confidence: ${collision.front_confidence.toFixed(2)}`;
+                }
+            } else {
+                warningEl.style.display = 'none';
+                infoEl.classList.remove('active');
+                frontIndicator.classList.remove('active');
+            }
+            
+            // Update side threats
+            if (collision.side_threat_left) {
+                leftIndicator.classList.add('active');
+            } else {
+                leftIndicator.classList.remove('active');
+            }
+            
+            if (collision.side_threat_right) {
+                rightIndicator.classList.add('active');
+            } else {
+                rightIndicator.classList.remove('active');
+            }
+            
+            // Update vibrator intensity visualization (optional: could add visual feedback)
+            const leftIntensity = collision.vibrator_left;
+            const rightIntensity = collision.vibrator_right;
+            
+            if (leftIntensity > 0) {
+                leftIndicator.style.opacity = 0.5 + (leftIntensity * 0.5);
+            }
+            if (rightIntensity > 0) {
+                rightIndicator.style.opacity = 0.5 + (rightIntensity * 0.5);
+            }
+        }
 
         // WebSocket connection
         let ws = null;
@@ -633,6 +788,7 @@
                 updateObjects(data.tracks);
                 updateSigns(data.signs || []);
                 updateInfoPanel(data.tracks, data.signs || []);
+                updateCollisionWarning(data.collision || {});
                 
                 // Update rate calculation
                 updateCount++;

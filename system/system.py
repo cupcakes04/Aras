@@ -52,6 +52,17 @@ class System:
         self._speaker_cmd: tuple[str | None, float] = (None, 0.0)
         self.objects: list = []
         self.traffic_signs: list = []
+        
+        # Collision detection state
+        self.collision_state = {
+            'front_threat': False,
+            'side_threat_left': False,
+            'side_threat_right': False,
+            'closest_front_dist': float('inf'),
+            'front_confidence': 0.0,
+            'vibrator_left': 0.0,
+            'vibrator_right': 0.0
+        }
 
     async def report(self):
         print("\n" + "="*60)
@@ -295,6 +306,17 @@ class System:
         else:
             self._vibrator_left_cmd = 0.0
             self._vibrator_right_cmd = 0.0
+        
+        # Update collision state for visualization
+        self.collision_state = {
+            'front_threat': front_threat,
+            'side_threat_left': side_threat_left,
+            'side_threat_right': side_threat_right,
+            'closest_front_dist': closest_front_dist if closest_front_dist < float('inf') else None,
+            'front_confidence': front_confidence,
+            'vibrator_left': self._vibrator_left_cmd,
+            'vibrator_right': self._vibrator_right_cmd
+        }
 
 
     # |-------------------------------------------------------------|

@@ -40,11 +40,13 @@ class Visualisation:
                 # Get tracked objects and traffic signs from system
                 tracks = self.system.tracker.get_all_tracks()
                 signs = self.system.traffic_signs
+                collision = self.system.collision_state
                 
                 # Prepare data payload
                 data = {
                     'tracks': tracks,
                     'signs': signs,
+                    'collision': collision,
                     'timestamp': asyncio.get_event_loop().time()
                 }
                 
