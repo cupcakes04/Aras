@@ -1,8 +1,10 @@
 import asyncio
-from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
+from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS, CameraOld, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
 from BEV import BEV
 from tracker import TrackManager
 from app.visualisation import Visualisation
+import yaml
+import os
 
 # https://github.com/cupcakes04/Aras
 
@@ -12,18 +14,36 @@ class System:
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Sensors
-        self.camera = Camera(max_history=10)
+        config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
+
+        # Debug use
+        self.camera = CameraOld(max_history=10, config=self.config)
         self.imu = IMU(max_history=10)
-        self.radar_front = Radar(max_history=10)
-        self.radar_back = Radar(max_history=10)
-        self.actuator = Actuator(max_history=10)
-        self.vibrator_left = Vibrator(max_history=10)
-        self.vibrator_right = Vibrator(max_history=10)
+        self.radar_front = RadarOld(max_history=10)
+        self.radar_back = RadarOld(max_history=10)
+        self.gps = GPSOld(max_history=10)
+        self.actuator = ActuatorOld(max_history=10)
+        self.vibrator_left = VibratorOld(max_history=10)
+        self.vibrator_right = VibratorOld(max_history=10)
         self.speaker = Speaker(max_history=10)
-        self.gps = GPS(max_history=10)
+
+        # # Sensors
+        # self.camera = Camera(max_history=10, config=self.config)
+        # self.imu = IMU(max_history=10)
+        # self.radar_front = HardwareRadar(port="/dev/ttyS3", baudrate=115200, max_history=10)
+        # self.radar_back = HardwareRadar(port="/dev/ttyS5", baudrate=115200, max_history=10)
+        # self.gps = HardwareGPS(port="/dev/ttyS4", baudrate=9600, max_history=10)
+
+        # # Hardware Actuators (with fallback built-in inside the modules)
+        # self.actuator = LinearActuator(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
+        # self.vibrator_left = HapticVibrator(gpio_chip='/dev/gpiochip0', gpio_line=10, max_history=10)
+        # self.vibrator_right = HapticVibrator(gpio_chip='/dev/gpiochip0', gpio_line=11, max_history=10)
+        # self.speaker = HardwareSpeaker(max_history=10)
 
         # Configure radar and cam to Bird's eye view (top down)
+
         self.bev = BEV(
             camera=self.camera,
             imu=self.imu,
@@ -31,13 +51,11 @@ class System:
             radar_back=self.radar_back,
 
             # Replace with calibrated values
-            image_pts=[[10, 20], [60, 20], [60, 40], [10, 40]],  # bbox corners
-            world_pts=[[0, 2], [0.5, 2], [0.5, 1.5], [0, 1.5]],  # real positions in metres
+            image_pts=self.config['bev']['image_pts'],
+            world_pts=self.config['bev']['world_pts'],
             
             # Example for 640x480 camera
-            camera_matrix=[[1, 0, 1],   # fx, 0, cx (optical center x)
-                        [0, 1, 1],   # 0, fy, cy (optical center y)
-                        [0, 0, 1]]
+            camera_matrix=self.config['bev']['camera_matrix'],
         )
 
         # Initialize tracker
@@ -47,10 +65,10 @@ class System:
         self.visualisation = Visualisation(self, port=8765)
 
         # Initialise outputs
-        self._actuator_cmd: bool  = True
+        self._actuator_cmd: bool  = False
         self._vibrator_left_cmd: float = 0.0
         self._vibrator_right_cmd: float = 0.0
-        self._speaker_cmd: tuple[str | None, float] = (None, 0.0)
+        self._speaker_cmd: str | None = None
         self.objects: list = []
         self.traffic_signs: list = []
 
@@ -83,7 +101,7 @@ class System:
         print(f"  Actuator:      {self._actuator_cmd}")
         print(f"  Vibrator Left: {self._vibrator_left_cmd:.2f}")
         print(f"  Vibrator Right:{self._vibrator_right_cmd:.2f}")
-        print(f"  Speaker:       {self._speaker_cmd}")
+        print(f"  Speaker:       {self._speaker_cmd or 'None'}")
         print("="*60)
 
 
@@ -213,11 +231,21 @@ class System:
         """
         LANE_HALF_WIDTH = 1.0   # metres either side of centre line
         TTC_THRESHOLD   = 2.0   # seconds — alert if time-to-collision is below this
+        MAX_BRAKE_SPEED_KMH = 50.0  # Do not auto-brake if ego speed > 50 km/h
+        MIN_BRAKE_SPEED_KMH = 5.0   # Do not auto-brake if ego speed < 5 km/h
+
+        # Get ego speed from GPS history (default to 0 if unavailable)
+        ego_speed_kmh = 0.0
+        if self.gps.history.get('values'):
+            latest_gps = self.gps.history['values'][-1]
+            if latest_gps and 'speed_kmh' in latest_gps:
+                ego_speed_kmh = float(latest_gps['speed_kmh'])
 
         # Get raw detections and update tracker
         tracked_objects = self.tracker.update(self.objects)
 
         front_collision = False
+        back_collision  = False
         best_ttc        = float('inf')
         best_conf       = 0.0
 
@@ -251,18 +279,25 @@ class System:
                 ttc = abs(y) / vy
                 if ttc < TTC_THRESHOLD:
                     obj['back_collision'] = True
+                    back_collision = True
 
         # ── Actuator outputs (front only) ─────────────────────────────────────
-        self._actuator_cmd = front_collision
+        # Only allow the physical brake actuator to fire if within safe speed bounds
+        if MIN_BRAKE_SPEED_KMH <= ego_speed_kmh <= MAX_BRAKE_SPEED_KMH:
+            self._actuator_cmd = front_collision
+        else:
+            self._actuator_cmd = False
 
         if front_collision:
             # Intensity scales with urgency: lower TTC = higher intensity
             intensity = min(1.0, best_conf * (TTC_THRESHOLD / max(best_ttc, 0.1)))
             self._vibrator_left_cmd  = intensity
             self._vibrator_right_cmd = intensity
+            self._speaker_cmd = WARN_FCW
         else:
             self._vibrator_left_cmd  = 0.0
             self._vibrator_right_cmd = 0.0
+            self._speaker_cmd = WARN_RCW if back_collision else None
 
         # Store annotated tracked objects for visualisation broadcast
         self.tracked_objects = tracked_objects

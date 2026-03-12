@@ -1,0 +1,50 @@
+objs_class_map:
+  0: 'person'
+  1: 'bicycle'
+  2: 'car'
+  3: 'motorcycle'
+  4: 'bus'
+  5: 'truck'
+
+human_class: ['person', 'bicycle']
+
+signs_class_map:
+  0: 'traffic light'
+  1: 'stop sign'
+
+class_dimensions:
+  car: { w: 1.8, h: 1.5, d: 4.5 }
+  # van: { w: 2.0, h: 2.2, d: 5.0 }
+  truck: { w: 2.5, h: 3.0, d: 8.0 }
+  person: { w: 0.5, h: 1.7, d: 0.3 }
+  bicycle: { w: 0.6, h: 1.7, d: 1.8 }
+  motorcycle: { w: 2.5, h: 3.5, d: 15.0 }
+  bus: { w: 0.5, h: 1.0, d: 0.5 }
+  misc: { w: 1.0, h: 1.0, d: 1.0 }
+
+sign_dimensions:
+  stop sign: { w: 0.6, h: 2.0, d: 0.05, color: 0xFF0000 }
+  traffic light: { w: 0.6, h: 2.0, d: 0.05, color: 0xFFAA00 }
+  # speed_limit: { w: 0.6, h: 2.0, d: 0.05, color: 0xFFFFFF }
+  # curveLeft: { w: 0.6, h: 2.0, d: 0.05, color: 0xFFFF00 }
+  # curveRight: { w: 0.6, h: 2.0, d: 0.05, color: 0xFFFF00 }
+  # pedestrianCrossing: { w: 0.6, h: 2.0, d: 0.05, color: 0x0000FF }
+  unknown_sign: { w: 0.6, h: 2.0, d: 0.05, color: 0x888888 }
+
+bev:
+  image_pts: [[10, 20], [60, 20], [60, 40], [10, 40]]  # bbox corners
+  world_pts: [[0, 2], [0.5, 2], [0.5, 1.5], [0, 1.5]]  # real positions in metres
+  camera_matrix: [[1, 0, 1], [0, 1, 1], [0, 0, 1]] 
+  # fx, 0, cx (optical center x) 
+  # 0, fy, cy (optical center y)
+
+default_class_dimension:
+  w: 1.0
+  h: 1.0
+  d: 1.0
+
+default_sign_dimension:
+  w: 0.6
+  h: 2.0
+  d: 0.05
+  color: 0x888888

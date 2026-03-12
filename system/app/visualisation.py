@@ -1,7 +1,8 @@
 import asyncio
 import json
 import websockets
-
+import os
+import yaml
 
 class Visualisation:
     """
@@ -22,6 +23,11 @@ class Visualisation:
         self.port = port
         self.clients = set()
         self._server = None
+        
+        # Load config
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'config.yaml')
+        with open(config_path, 'r') as f:
+            self.config = yaml.safe_load(f)
         
     async def register(self, websocket):
         """Register a new client connection."""
@@ -50,7 +56,8 @@ class Visualisation:
                     'tracks': tracks,
                     'signs': signs,
                     'gps': gps,
-                    'timestamp': asyncio.get_event_loop().time()
+                    'timestamp': asyncio.get_event_loop().time(),
+                    'config': self.config
                 }
                 
                 message = json.dumps(data)

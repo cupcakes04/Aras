@@ -43,6 +43,30 @@
             margin-bottom: 15px;
             color: #4CAF50;
             font-size: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #minimize-btn {
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 5px;
+        }
+        
+        #minimize-btn:hover {
+            color: #fff;
+        }
+        
+        #info-content {
+            transition: all 0.3s ease;
+        }
+        
+        #info-content.minimized {
+            display: none;
         }
         
         .status-item {
@@ -202,16 +226,21 @@
     </div>
     
     <div id="info-panel">
-        <h2>ARAS Tracking System</h2>
-        <div class="status-item">
-            <div class="status-label">Tracked Objects</div>
-            <div class="status-value" id="object-count">0 confirmed, 0 tentative</div>
+        <h2>
+            ARAS Tracking System
+            <button id="minimize-btn" title="Toggle Panel">▼</button>
+        </h2>
+        <div id="info-content">
+            <div class="status-item">
+                <div class="status-label">Tracked Objects</div>
+                <div class="status-value" id="object-count">0 confirmed, 0 tentative</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Update Rate</div>
+                <div class="status-value" id="update-rate">0 Hz</div>
+            </div>
+            <div id="objects-list"></div>
         </div>
-        <div class="status-item">
-            <div class="status-label">Update Rate</div>
-            <div class="status-value" id="update-rate">0 Hz</div>
-        </div>
-        <div id="objects-list"></div>
     </div>
     
     <div id="controls">
@@ -241,24 +270,16 @@
         import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
         // Object dimensions (width, height, depth in meters)
-        // Colors are overridden at runtime based on collision state
-        const CLASS_DIMENSIONS = {
-            'car':            { w: 1.8, h: 1.5, d: 4.5 },
-            'van':            { w: 2.0, h: 2.2, d: 5.0 },
-            'truck':          { w: 2.5, h: 3.0, d: 8.0 },
-            'pedestrian':     { w: 0.5, h: 1.7, d: 0.3 },
-            'person_sitting': { w: 0.5, h: 1.0, d: 0.5 },
-            'cyclist':        { w: 0.6, h: 1.7, d: 1.8 },
-            'tram':           { w: 2.5, h: 3.5, d: 15.0 },
-            'misc':           { w: 1.0, h: 1.0, d: 1.0 }
-        };
+        // Values dynamically overwritten by WebSocket config
+        let CLASS_DIMENSIONS = {};
+        let DEFAULT_CLASS_DIMENSION = { w: 1.0, h: 1.0, d: 1.0 }; // Fallback before WS connects
 
         const COL_NORMAL    = 0x2196F3;  // blue   — front/neutral objects
         const COL_BACK      = 0xFFC107;  // yellow — back objects
         const COL_COLLISION = 0xF44336;  // red    — collision alert
         const COL_HUMAN     = 0x9C27B0;  // purple — pedestrian / person
 
-        const HUMAN_CLASSES = new Set(['pedestrian', 'person_sitting']);
+        let HUMAN_CLASSES = new Set();
 
         function isHuman(obj) { return HUMAN_CLASSES.has(obj.name); }
 
@@ -269,16 +290,10 @@
             return COL_NORMAL;
         }
         
-        // Traffic sign dimensions (octagonal/circular signs on poles)
-        const SIGN_DIMENSIONS = {
-            'stop': { w: 0.6, h: 2.0, d: 0.05, color: 0xFF0000 },
-            'slow': { w: 0.6, h: 2.0, d: 0.05, color: 0xFFAA00 },
-            'speed_limit': { w: 0.6, h: 2.0, d: 0.05, color: 0xFFFFFF },
-            'curveLeft': { w: 0.6, h: 2.0, d: 0.05, color: 0xFFFF00 },
-            'curveRight': { w: 0.6, h: 2.0, d: 0.05, color: 0xFFFF00 },
-            'pedestrianCrossing': { w: 0.6, h: 2.0, d: 0.05, color: 0x0000FF },
-            'unknown_sign': { w: 0.6, h: 2.0, d: 0.05, color: 0x888888 }
-        };
+        // Traffic sign dimensions
+        // Values dynamically overwritten by WebSocket config
+        let SIGN_DIMENSIONS = {};
+        let DEFAULT_SIGN_DIMENSION = { w: 0.6, h: 2.0, d: 0.05, color: 0x888888 }; // Fallback before WS connects
 
         // Scene setup
         const scene = new THREE.Scene();
@@ -359,6 +374,15 @@
         let showLabels = true;
         let showTrails = false;
         let showGrid = true;
+        
+        // UI Controls
+        const minimizeBtn = document.getElementById('minimize-btn');
+        const infoContent = document.getElementById('info-content');
+        
+        minimizeBtn.addEventListener('click', () => {
+            infoContent.classList.toggle('minimized');
+            minimizeBtn.textContent = infoContent.classList.contains('minimized') ? '▲' : '▼';
+        });
 
         // Lane corridor — two parallel blue lines + forward arrows
         const LANE_HALF_WIDTH = 1.0;  // must match system.py
@@ -466,7 +490,7 @@
 
         // Create object mesh
         function createObjectMesh(objData) {
-            const dims  = CLASS_DIMENSIONS[objData.name] || CLASS_DIMENSIONS['misc'];
+            const dims  = CLASS_DIMENSIONS[objData.name] || DEFAULT_CLASS_DIMENSION;
             const color = objectColor(objData);
             const human = isHuman(objData);
             
@@ -751,7 +775,7 @@
                 const collisionTag = obj.front_collision ? ' 🔴 FRONT COLLISION'
                                    : obj.back_collision  ? ' 🔴 BACK COLLISION'
                                    : '';
-                
+                console.log(obj)
                 div.innerHTML = `
                     <div class="object-header">
                         <span class="object-name">${obj.name}${collisionTag}</span>
@@ -814,6 +838,26 @@
             
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                
+                // Update dimensions if config is present
+                if (data.config) {
+                    if (data.config.class_dimensions) {
+                        CLASS_DIMENSIONS = data.config.class_dimensions;
+                    }
+                    if (data.config.sign_dimensions) {
+                        SIGN_DIMENSIONS = data.config.sign_dimensions;
+                    }
+                    if (data.config.default_class_dimension) {
+                        DEFAULT_CLASS_DIMENSION = data.config.default_class_dimension;
+                    }
+                    if (data.config.default_sign_dimension) {
+                        DEFAULT_SIGN_DIMENSION = data.config.default_sign_dimension;
+                    }
+                    if (data.config.human_class) {
+                        HUMAN_CLASSES = new Set(data.config.human_class);
+                    }
+                }
+                
                 updateObjects(data.tracks);
                 updateSigns(data.signs || []);
                 updateInfoPanel(data.tracks, data.signs || []);

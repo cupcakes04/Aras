@@ -1,174 +1,61 @@
-# ARAS 3D Visualization
+# ARAS Visualization Dashboard
 
-Real-time 3D visualization of multi-object tracking using Three.js.
+![alt text](../../assets/dashboard.png)
+![alt text](../../assets/image_3.png)
+![alt text](../../assets/image_2.png)
 
-## Features
+The ARAS Visualization Dashboard is a real-time, browser-based 3D Bird's-Eye-View (BEV) rendering of the environment tracked by the Advanced Rider Assistance System. It is built using Three.js and connects directly to the system's WebSocket server to visualize objects, speeds, collision statuses, and historical tracking trails.
 
-- **3D Bird's Eye View**: Objects displayed in 3D space with realistic dimensions
-- **Real-time Tracking**: Live updates via WebSocket at 20Hz
-- **Object Classes**: Different colors and sizes for each object type:
-  - 🚗 Car (green)
-  - 🚐 Van (blue)
-  - 🚚 Truck (orange)
-  - 🚶 Pedestrian (yellow)
-  - 🚴 Cyclist (purple)
-  - 🚊 Tram (cyan)
-  - 📦 Misc (gray)
-- **Track States**: Visual distinction between confirmed (solid) and tentative (transparent) tracks
-- **Velocity Vectors**: Real-time speed and direction display
-- **Motion Trails**: Optional path history visualization
-- **Interactive Controls**: Orbit camera, toggle grid, labels, and trails
+## 🌟 Key Features
 
-## Object Dimensions
+- **Live 3D Rendering (Three.js)**: Full 3D environment with free-camera OrbitControls (pan, zoom, rotate).
+- **Dynamic Object Styling**:
+  - 🔵 **Blue**: Neutral objects in front of the bike.
+  - 🟡 **Yellow**: Objects located behind the bike.
+  - 🟣 **Purple**: Highly vulnerable human classes (e.g., pedestrians, cyclists) with a visual "halo" effect.
+  - 🔴 **Red (Flashing)**: Active collision threats violating the Time-To-Collision (TTC) threshold.
+  - **Translucency**: Ghosted (translucent) objects indicate "tentative" tracks that are still being verified by the Kalman Filter, while solid objects denote "confirmed" tracks.
+- **Traffic Sign Recognition**: Renders identified traffic signs (Stop, Slow, Speed Limits) as physical 3D signs on poles along the roadway.
+- **Object Trajectory Trails**: A toggleable feature that draws a colored line path tracing the historical movement of an object.
+- **Diagnostic Information Panel**: An on-screen UI overlay displaying:
+  - Total confirmed and tentative track counts.
+  - Live system update frequency (Hz).
+  - Individual object breakdowns including assigned IDs, positions, radar/tracker velocities, and confidence scores.
 
-Each object class has realistic 3D dimensions (width × height × depth):
+## ⚙️ How it Works
+The frontend establishes a connection via `ws://localhost:8765`. On every update tick from the backend:
+1. **Tracks & Signs**: Data packets are parsed to extract world positions, object classes, and calculated statuses (e.g., `front_collision`, `back_collision`).
+2. **Dynamic Configuration**: At connection, the frontend receives a `config` payload containing the size dimensions for different classes (`car`, `truck`, `pedestrian`, etc.) as defined in `system/config.yaml`.
+3. **Mesh Updates**: The Three.js scene graph creates, updates, or deletes 3D bounding boxes and sprites matching the exact metric sizes and distances computed by the backend.
 
-| Class | Width | Height | Depth | Color |
-|-------|-------|--------|-------|-------|
-| Car | 1.8m | 1.5m | 4.5m | Green |
-| Van | 2.0m | 2.2m | 5.0m | Blue |
-| Truck | 2.5m | 3.0m | 8.0m | Orange |
-| Pedestrian | 0.5m | 1.7m | 0.3m | Yellow |
-| Person Sitting | 0.5m | 1.0m | 0.5m | Amber |
-| Cyclist | 0.6m | 1.7m | 1.8m | Purple |
-| Tram | 2.5m | 3.5m | 15.0m | Cyan |
-| Misc | 1.0m | 1.0m | 1.0m | Gray |
-
-## Coordinate System
-
-- **BEV Coordinates**: (x, y) where +y is forward, +x is right
+- **BEV Coordinates**: $(x, y)$ where $+y$ is forward, $+x$ is right.
 - **Three.js Mapping**: 
-  - x → x (right)
-  - y → height
-  - z → -y (forward, negated for Three.js convention)
-- **Origin**: Ego vehicle (bike) at (0, 0, 0)
+  - $x \rightarrow x$ (right)
+  - $y \rightarrow$ height
+  - $z \rightarrow -y$ (forward, negated for Three.js convention)
+- **Origin**: Ego vehicle (bike) at $(0, 0, 0)$.
 
-## Usage
+## 🚀 Usage
 
 ### 1. Install Dependencies
-
 ```bash
 pip install websockets
 ```
 
-### 2. Run the System
+### 2. Configure Sizes
+If you wish to change the size or color of an object or sign rendered in the visualization, edit the respective properties under `class_dimensions` and `sign_dimensions` in the root `system/config.yaml` file. The frontend will dynamically inherit these changes.
 
+### 3. Run the System
 From the `system` directory:
-
 ```bash
-python run.py
+python system.py
 ```
 
 This will:
-- Start the ARAS tracking system
-- Launch WebSocket server on `ws://localhost:8765`
-- Begin streaming tracking data at 20Hz
-- Display console status reports
+- Start the ARAS tracking system.
+- Launch the WebSocket server on `ws://localhost:8765`.
+- Begin streaming tracking data.
 
-### 3. Open Visualization
-
-Simply open `app/index.html` in a web browser (double-click or drag to browser).
-
-The visualization will automatically connect to `ws://localhost:8765`.
-
-## Controls
-
-### Camera
-- **Left Mouse**: Rotate view
-- **Right Mouse**: Pan
-- **Scroll**: Zoom in/out
-- **Reset Camera**: Return to default view
-
-### Display Options
-- **Toggle Grid**: Show/hide ground grid
-- **Toggle Labels**: Show/hide object name labels
-- **Toggle Trails**: Show/hide motion history trails
-
-## Info Panel
-
-The left panel displays:
-- **Connection Status**: WebSocket connection state
-- **Tracked Objects**: Count of confirmed and tentative tracks
-- **Update Rate**: Data stream frequency (Hz)
-- **Object List**: Detailed info for each tracked object:
-  - ID and class name
-  - Position (x, y) in meters
-  - Velocity magnitude
-  - Confidence score
-  - Hit count
-
-## Architecture
-
-```
-┌─────────────────┐
-│  ARAS System    │
-│  (tracker.py)   │
-└────────┬────────┘
-         │
-         │ Tracking Data
-         ▼
-┌─────────────────┐
-│ WebSocket Server│
-│  (server.py)    │
-└────────┬────────┘
-         │
-         │ JSON Stream (20Hz)
-         ▼
-┌─────────────────┐
-│  Three.js Web   │
-│  (index.html)   │
-└─────────────────┘
-```
-
-## Data Format
-
-WebSocket messages contain:
-
-```json
-{
-  "tracks": [
-    {
-      "id": 1,
-      "name": "car",
-      "world_x": 2.5,
-      "world_y": 5.0,
-      "vx": 0.1,
-      "vy": 2.0,
-      "confidence": 0.95,
-      "cam_only": false,
-      "hits": 15,
-      "misses": 0,
-      "age": 15,
-      "state": "confirmed"
-    }
-  ],
-  "timestamp": 1234567890.123
-}
-```
-
-## Troubleshooting
-
-### Connection Issues
-- Ensure `server.py` is running
-- Check WebSocket URL is `ws://localhost:8765`
-- Verify no firewall blocking port 8765
-
-### No Objects Visible
-- Check that tracking system is receiving sensor data
-- Verify objects are in confirmed state (3+ hits)
-- Check console for JavaScript errors
-
-### Performance Issues
-- Reduce trail length (currently 50 points)
-- Disable trails if many objects
-- Lower WebSocket update rate in `server.py`
-
-## Future Enhancements
-
-- [ ] Collision zone visualization (front/side threat areas)
-- [ ] Velocity vector arrows
-- [ ] Object bounding box uncertainty ellipses
-- [ ] Playback controls (pause, rewind)
-- [ ] Data recording and replay
-- [ ] Multiple camera views (top, side, perspective)
-- [ ] Heatmap of object density
+### 4. Open Visualization
+Simply open `system/app/index.html` in any modern web browser (double-click or drag to browser). 
+Use the UI buttons on the bottom-left to toggle grid lines, object labels, and tracking trails.

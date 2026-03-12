@@ -1,0 +1,11 @@
+asyncio
+opencv-python
+websockets
+numpy
+scipy
+pynmea2
+python-periphery
+luma.core
+luma.oled
+Pillow
+PyYAML

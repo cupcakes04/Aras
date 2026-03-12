@@ -146,26 +146,26 @@ class BEV:
         Convert latest camera detections to flat-plane world (x, y) metres.
         Uses bottom-centre of each bbox as the ground contact point.
 
-        Returns dict with 'cars' and 'signs' keys, each containing list of detections
+        Returns dict with 'objs' and 'signs' keys, each containing list of detections
         with 'world_x', 'world_y' added.
         """
         if not self._camera.history['values']:
-            return {'cars': [], 'signs': []}
+            return {'objs': [], 'signs': []}
 
         roll, pitch = self._imu_tilt(self._imu.history['values'])
         latest = self._camera.history['values'][-1]
         
-        results = {'cars': [], 'signs': []}
+        results = {'objs': [], 'signs': []}
         
-        # Process cars
-        for det in latest.get('cars', []):
+        # Process objs
+        for det in latest.get('objs', []):
             x1, y1, x2, y2 = det['bbox']
             u = (x1 + x2) / 2.0   # horizontal centre
             v = float(y2)          # bottom edge -> ground contact point
 
             wx, wy = self._pixel_to_world(u, v, roll, pitch)
 
-            results['cars'].append({
+            results['objs'].append({
                 **det,
                 'world_x': float(wx),
                 'world_y': float(wy),
@@ -184,7 +184,6 @@ class BEV:
                 'world_x': float(wx),
                 'world_y': float(wy),
             })
-            
         return results
 
     def get_radar_world_points(self, mode: Literal['front', 'back']):
