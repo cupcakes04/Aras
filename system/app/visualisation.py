@@ -40,11 +40,16 @@ class Visualisation:
                 # Use annotated tracked objects (with collision flags) from collision_detector
                 tracks = getattr(self.system, 'tracked_objects', self.system.tracker.get_all_tracks())
                 signs = self.system.traffic_signs
+
+                # Latest GPS fix (None if no reading yet)
+                gps_history = self.system.gps.history.get('values', [])
+                gps = gps_history[-1] if gps_history else None
                 
                 # Prepare data payload
                 data = {
                     'tracks': tracks,
                     'signs': signs,
+                    'gps': gps,
                     'timestamp': asyncio.get_event_loop().time()
                 }
                 

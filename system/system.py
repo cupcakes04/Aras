@@ -1,5 +1,5 @@
 import asyncio
-from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker
+from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
 from BEV import BEV
 from tracker import TrackManager
 from app.visualisation import Visualisation
@@ -20,6 +20,7 @@ class System:
         self.vibrator_left = Vibrator(max_history=10)
         self.vibrator_right = Vibrator(max_history=10)
         self.speaker = Speaker(max_history=10)
+        self.gps = GPS(max_history=10)
 
         # Configure radar and cam to Bird's eye view (top down)
         self.bev = BEV(
@@ -291,6 +292,7 @@ class System:
             self.assign_task(self.imu.read, period=0.01),
             self.assign_task(self.radar_front.read, period=0.05),
             self.assign_task(self.radar_back.read, period=0.05),
+            self.assign_task(self.gps.read, period=1.0),
 
             # Processing
             self.assign_task(self.generate_world_objects, period=0.05),

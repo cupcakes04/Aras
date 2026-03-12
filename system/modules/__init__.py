@@ -4,3 +4,4 @@ from .radar import Radar
 from .actuator import Actuator
 from .vibrator import Vibrator
 from .speaker import Speaker
+from .gps import GPS
