@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARAS Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #050510;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* ── Title bar ────────────────────────────────────────────── */
+        #titlebar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 18px;
+            background: #080816;
+            border-bottom: 1px solid #1a1a30;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .title-logo {
+            font-size: 16px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            color: #2196F3;
+        }
+        .title-logo span { color: #fff; }
+
+        .title-tabs {
+            display: flex;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            padding: 4px 14px;
+            border-radius: 20px;
+            border: 1px solid #333;
+            background: transparent;
+            color: #888;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: #2196F3;
+            border-color: #2196F3;
+            color: #fff;
+        }
+        .tab-btn:hover:not(.active) { border-color: #555; color: #ccc; }
+
+        .title-time {
+            font-size: 12px;
+            color: #555;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        /* ── Split area ───────────────────────────────────────────── */
+        #split {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* ── Panes ────────────────────────────────────────────────── */
+        .pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: flex 0.35s ease;
+        }
+
+        .pane-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            background: #0a0a1c;
+            border-bottom: 1px solid #1a1a30;
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+        }
+
+        .pane-label .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+        }
+
+        #pane-collision .pane-label .dot { background: #2196F3; }
+        #pane-nav .pane-label .dot       { background: #4CAF50; }
+
+        .pane iframe {
+            flex: 1;
+            border: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Divider */
+        #divider {
+            width: 4px;
+            background: #1a1a30;
+            cursor: col-resize;
+            flex-shrink: 0;
+            position: relative;
+            transition: background 0.2s;
+        }
+        #divider:hover { background: #2196F3; }
+        #divider::after {
+            content: '⋮';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333;
+            font-size: 18px;
+            line-height: 1;
+        }
+        #divider:hover::after { color: #fff; }
+
+        /* ── Layout modes ─────────────────────────────────────────── */
+        /* split (default) — both panes equal */
+        body.mode-split #pane-collision { flex: 1; }
+        body.mode-split #pane-nav       { flex: 1; }
+        body.mode-split #divider        { display: block; }
+
+        /* collision-only */
+        body.mode-collision #pane-collision { flex: 1; }
+        body.mode-collision #pane-nav       { flex: 0; min-width: 0; overflow: hidden; }
+        body.mode-collision #divider        { display: none; }
+
+        /* nav-only */
+        body.mode-nav #pane-collision { flex: 0; min-width: 0; overflow: hidden; }
+        body.mode-nav #pane-nav       { flex: 1; }
+        body.mode-nav #divider        { display: none; }
+    </style>
+</head>
+<body class="mode-split">
+
+<div id="titlebar">
+    <div class="title-logo">ARAS <span>DASHBOARD</span></div>
+
+    <div class="title-tabs">
+        <button class="tab-btn" onclick="setMode('collision')">Collision View</button>
+        <button class="tab-btn active" onclick="setMode('split')">Split View</button>
+        <button class="tab-btn" onclick="setMode('nav')">Navigation</button>
+    </div>
+
+    <div class="title-time" id="clock">—</div>
+</div>
+
+<div id="split">
+    <!-- Left pane: collision / 3D view -->
+    <div class="pane" id="pane-collision">
+        <div class="pane-label">
+            <span class="dot"></span>
+            COLLISION DETECTION
+        </div>
+        <iframe id="frame-collision" src="index.html" title="Collision Detection"></iframe>
+    </div>
+
+    <!-- Draggable divider -->
+    <div id="divider"></div>
+
+    <!-- Right pane: navigation -->
+    <div class="pane" id="pane-nav">
+        <div class="pane-label">
+            <span class="dot"></span>
+            NAVIGATION
+        </div>
+        <iframe id="frame-nav" src="navigation.html" title="Navigation"></iframe>
+    </div>
+</div>
+
+<script>
+// ── Clock ─────────────────────────────────────────────────────────────────
+function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+        now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Layout modes ──────────────────────────────────────────────────────────
+function setMode(mode) {
+    document.body.className = 'mode-' + mode;
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        const modes = ['collision', 'split', 'nav'];
+        btn.classList.toggle('active', modes[i] === mode);
+    });
+}
+
+// ── Draggable divider ─────────────────────────────────────────────────────
+const divider  = document.getElementById('divider');
+const paneL    = document.getElementById('pane-collision');
+const paneR    = document.getElementById('pane-nav');
+const splitEl  = document.getElementById('split');
+
+let dragging = false;
+let startX   = 0;
+let startLW  = 0;
+
+divider.addEventListener('mousedown', e => {
+    dragging = true;
+    startX   = e.clientX;
+    startLW  = paneL.getBoundingClientRect().width;
+    document.body.style.userSelect = 'none';
+    // Overlay iframes to capture mouse during drag
+    document.querySelectorAll('iframe').forEach(f => f.style.pointerEvents = 'none');
+});
+
+document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const dx        = e.clientX - startX;
+    const totalW    = splitEl.getBoundingClientRect().width - divider.offsetWidth;
+    const newLW     = Math.max(200, Math.min(totalW - 200, startLW + dx));
+    const newRW     = totalW - newLW;
+    paneL.style.flex = `0 0 ${newLW}px`;
+    paneR.style.flex = `0 0 ${newRW}px`;
+});
+
+document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    document.querySelectorAll('iframe').forEach(f => f.style.pointerEvents = '');
+});
+</script>
+</body>
+</html>

@@ -35,10 +35,12 @@ class IMU(History):
         pass
         
     async def read(self):
-        # 1. Read the sensor values (placeholder)
+        # 1. Read the sensor values
+        # Dummy values — bike assumed perfectly upright (no roll/pitch).
+        # Replace with real hardware reads when IMU is connected.
         value = {
-            "accel": {"x": -0.12, "y": 0.98, "z": 0.05},   # in g (gravity units)
-            "gyro":  {"x": 0.01, "y": -0.03, "z": 0.00},   # in deg/s
+            "accel": {"x": 0.0, "y": 0.0, "z": 1.0},   # in g (gravity units) — pure gravity on z, no tilt
+            "gyro":  {"x": 0.0, "y": 0.0, "z": 0.0},   # in deg/s — stationary / no rotation
         }
 
         # 2. Record the action in history

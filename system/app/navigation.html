@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARAS Navigation</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0d0d1a;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Top bar ─────────────────────────────────────────────── */
+        #topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 14px;
+            background: rgba(8,8,22,0.97);
+            border-bottom: 1px solid #222;
+            z-index: 1000;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-size: 16px;
+            font-weight: 800;
+            color: #2196F3;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .logo span { color: #fff; }
+
+        #search-wrapper {
+            position: relative;
+            flex: 1;
+            max-width: 400px;
+        }
+        #search-row { display: flex; gap: 5px; }
+        #dest-input {
+            flex: 1;
+            padding: 7px 14px;
+            border-radius: 20px;
+            border: 1.5px solid #333;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+        }
+        #dest-input:focus { border-color: #2196F3; }
+        #dest-input::placeholder { color: #555; }
+        #clear-btn {
+            padding: 7px 11px;
+            border-radius: 20px;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            color: #ccc;
+            font-size: 13px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        #clear-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* Autocomplete */
+        #suggestions {
+            display: none;
+            position: absolute;
+            top: calc(100% + 5px);
+            left: 0; right: 36px;
+            background: #1c1c2e;
+            border: 1px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            z-index: 4000;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .sug-item {
+            padding: 9px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #222;
+            display: flex; flex-direction: column; gap: 1px;
+        }
+        .sug-item:last-child { border-bottom: none; }
+        .sug-item:hover { background: #252540; }
+        .sug-main { font-size: 12px; font-weight: 600; color: #eee; }
+        .sug-sub  { font-size: 10px; color: #777; }
+
+        /* Speed badge */
+        #speed-badge {
+            display: flex; flex-direction: column; align-items: center;
+            background: #1565C0; border-radius: 8px;
+            padding: 4px 12px; min-width: 58px; flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        #speed-value { font-size: 22px; font-weight: 900; line-height: 1; }
+        #speed-unit  { font-size: 9px; opacity: 0.8; letter-spacing: 1px; }
+
+        /* WS dot */
+        #ws-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #777; flex-shrink: 0; }
+        #ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #F44336; transition: background 0.3s; }
+        #ws-dot.connected { background: #4CAF50; }
+
+        /* ── Main area: map + sidebar ─────────────────────────────── */
+        #main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #map { flex: 1; }
+
+        /* ── Sidebar ─────────────────────────────────────────────── */
+        #sidebar {
+            width: 0;
+            overflow: hidden;
+            background: rgba(8,8,22,0.97);
+            border-left: 1px solid #222;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s ease;
+            flex-shrink: 0;
+            z-index: 500;
+        }
+        #sidebar.open { width: 270px; }
+
+        #sidebar-header {
+            padding: 10px 14px 8px;
+            border-bottom: 1px solid #222;
+            flex-shrink: 0;
+        }
+        #sidebar-dest {
+            font-size: 13px; font-weight: 700; color: #2196F3;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #sidebar-summary { font-size: 11px; color: #888; margin-top: 3px; }
+        #sidebar-eta { font-size: 12px; font-weight: 600; color: #4CAF50; margin-top: 2px; }
+
+        #steps-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+        #steps-list::-webkit-scrollbar { width: 4px; }
+        #steps-list::-webkit-scrollbar-track { background: transparent; }
+        #steps-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 7px 14px;
+            border-bottom: 1px solid #1a1a2e;
+            cursor: pointer;
+        }
+        .step-item:hover { background: #12122a; }
+        .step-icon {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: #1a2a4a; border: 1px solid #2196F3;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; flex-shrink: 0; margin-top: 1px;
+        }
+        .step-text { flex: 1; }
+        .step-name { font-size: 12px; color: #ddd; line-height: 1.3; }
+        .step-dist { font-size: 10px; color: #666; margin-top: 2px; }
+
+        .step-item.active { background: #0d1f3a; }
+        .step-item.active .step-name { color: #fff; }
+        .step-item.active .step-icon { background: #2196F3; border-color: #2196F3; }
+
+        /* ── Floating overlays ───────────────────────────────────── */
+
+        /* Speed limit sign */
+        #speed-limit-widget {
+            position: absolute;
+            bottom: 50px; right: 56px;
+            z-index: 2000;
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+        }
+        #speed-limit-sign {
+            width: 58px; height: 58px;
+            border-radius: 50%;
+            border: 4px solid #c62828;
+            background: #fff;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.55);
+            transition: border-color 0.3s, background 0.3s;
+        }
+        #speed-limit-sign.warning { border-color: #F57C00; animation: pulse-warn 0.7s infinite alternate; }
+        #speed-limit-sign.over    { border-color: #B71C1C; background: #FFEBEE; animation: pulse-over 0.4s infinite alternate; }
+        @keyframes pulse-warn { from { box-shadow: 0 3px 12px rgba(245,124,0,0.4); } to { box-shadow: 0 3px 22px rgba(245,124,0,0.9); } }
+        @keyframes pulse-over { from { box-shadow: 0 3px 12px rgba(183,28,28,0.5); } to { box-shadow: 0 3px 26px rgba(183,28,28,1.0); } }
+        #limit-number { font-size: 18px; font-weight: 900; color: #111; line-height: 1; }
+        #limit-label  { font-size: 7px; font-weight: 700; color: #555; }
+        #limit-caption { font-size: 9px; color: #888; }
+
+        /* Overspeed banner */
+        #over-banner {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 3000;
+            background: linear-gradient(90deg, #B71C1C, #E53935);
+            color: #fff; font-size: 12px; font-weight: 700;
+            text-align: center; padding: 6px;
+            animation: banner-flash 0.45s infinite alternate;
+        }
+        @keyframes banner-flash { from { opacity: 1; } to { opacity: 0.65; } }
+
+        /* Re-centre button */
+        #recenter-btn {
+            position: absolute;
+            bottom: 50px; left: 12px;
+            z-index: 2000;
+            background: rgba(8,8,22,0.88);
+            border: 1px solid #444; color: #fff;
+            border-radius: 6px; padding: 6px 10px;
+            font-size: 16px; cursor: pointer;
+        }
+        #recenter-btn:hover { background: rgba(33,150,243,0.3); }
+
+        /* ── Bottom bar ──────────────────────────────────────────── */
+        #bottombar {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 5px 14px;
+            background: rgba(8,8,22,0.97);
+            border-top: 1px solid #222;
+            z-index: 1000;
+            flex-shrink: 0;
+            gap: 6px;
+        }
+        .info-card { display: flex; flex-direction: column; align-items: center; min-width: 60px; }
+        .info-label { font-size: 8px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+        .info-value { font-size: 12px; font-weight: 700; color: #fff; margin-top: 1px; }
+        .info-value.hi   { color: #2196F3; }
+        .info-value.warn { color: #FF9800; }
+        .info-value.over { color: #F44336; }
+
+        /* Bike marker */
+        .bike-dot {
+            width: 32px; height: 32px;
+            background: #1976D2; border: 3px solid #fff; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px;
+            box-shadow: 0 0 0 5px rgba(33,150,243,0.3), 0 3px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Leaflet zoom override */
+        .leaflet-control-zoom { bottom: 12px !important; right: 12px !important; }
+    </style>
+</head>
+<body>
+
+<div id="over-banner">⚠ SPEED LIMIT EXCEEDED</div>
+
+<div id="topbar">
+    <div class="logo">ARAS <span>NAV</span></div>
+
+    <div id="search-wrapper">
+        <div id="search-row">
+            <input id="dest-input" type="text" placeholder="Search destination…" autocomplete="off" spellcheck="false" />
+            <button id="clear-btn">✕</button>
+        </div>
+        <div id="suggestions"></div>
+    </div>
+
+    <div id="speed-badge">
+        <span id="speed-value">—</span>
+        <span id="speed-unit">KM/H</span>
+    </div>
+
+    <div id="ws-status">
+        <div id="ws-dot"></div>
+        <span id="ws-label">—</span>
+    </div>
+</div>
+
+<div id="main">
+    <div id="map"></div>
+
+    <!-- Directions sidebar -->
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <div id="sidebar-dest">—</div>
+            <div id="sidebar-summary">—</div>
+            <div id="sidebar-eta">—</div>
+        </div>
+        <div id="steps-list"></div>
+    </div>
+</div>
+
+<!-- Floating overlays (inside #main context for absolute positioning) -->
+<div id="speed-limit-widget">
+    <div id="speed-limit-sign">
+        <span id="limit-number">—</span>
+        <span id="limit-label">KM/H</span>
+    </div>
+    <span id="limit-caption">Speed Limit</span>
+</div>
+
+<button id="recenter-btn" title="Re-centre">⊙</button>
+
+<div id="bottombar">
+    <div class="info-card">
+        <span class="info-label">Lat</span>
+        <span class="info-value hi" id="lat-val">—</span>
+    </div>
+    <div class="info-card">
+        <span class="info-label">Lon</span>
+        <span class="info-value hi" id="lon-val">—</span>
+    </div>
+    <div class="info-card">
+        <span class="info-label">Speed</span>
+        <span class="info-value" id="spd-val">—</span>
+    </div>
+    <div class="info-card">
+        <span class="info-label">Limit</span>
+        <span class="info-value" id="limit-val">—</span>
+    </div>
+    <div class="info-card">
+        <span class="info-label">Status</span>
+        <span class="info-value" id="compliance-val">—</span>
+    </div>
+    <div class="info-card">
+        <span class="info-label">GPS</span>
+        <span class="info-value" id="fix-val">Waiting</span>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+const WS_URL    = 'ws://localhost:8765';
+const DEF_LAT   = 3.1390;
+const DEF_LON   = 101.6869;
+const NOMINATIM = 'https://nominatim.openstreetmap.org';
+const OSRM      = 'https://router.project-osrm.org/route/v1/car';
+const OVERPASS  = 'https://overpass-api.de/api/interpreter';
+
+// ── Map ───────────────────────────────────────────────────────────────────
+const map = L.map('map', { center: [DEF_LAT, DEF_LON], zoom: 17, zoomControl: false });
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OSM contributors &copy; CARTO',
+    subdomains: 'abcd', maxZoom: 20
+}).addTo(map);
+
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+// ── Bike marker ───────────────────────────────────────────────────────────
+const bikeIcon = L.divIcon({
+    className: '',
+    html: '<div class="bike-dot">🚲</div>',
+    iconSize: [32, 32], iconAnchor: [16, 16],
+});
+
+const bikeMarker = L.marker([DEF_LAT, DEF_LON], { icon: bikeIcon, zIndexOffset: 1000 }).addTo(map);
+const bikeCircle = L.circle([DEF_LAT, DEF_LON], {
+    radius: 6, color: '#2196F3', fillColor: '#2196F3', fillOpacity: 0.15, weight: 1
+}).addTo(map);
+
+let followMode  = true;
+let lastLat     = DEF_LAT;
+let lastLon     = DEF_LON;
+let lastSpeed   = 0;
+let currentLimit = null;
+
+map.on('dragstart', () => { followMode = false; });
+document.getElementById('recenter-btn').addEventListener('click', () => {
+    followMode = true;
+    map.setView([lastLat, lastLon], 16, { animate: true });
+});
+
+// ── Trail ─────────────────────────────────────────────────────────────────
+const trailPts = [];
+const trail = L.polyline([], { color: '#1976D2', weight: 3, opacity: 0.45 }).addTo(map);
+
+function pushTrail(lat, lon) {
+    trailPts.push([lat, lon]);
+    if (trailPts.length > 300) trailPts.shift();
+    trail.setLatLngs(trailPts);
+}
+
+// ── Route layer ───────────────────────────────────────────────────────────
+let routeLayerOuter = null;
+let routeLayerInner = null;
+let destMarker      = null;
+let currentDestName = '';
+
+function clearRouteLayer() {
+    if (routeLayerOuter) { map.removeLayer(routeLayerOuter); routeLayerOuter = null; }
+    if (routeLayerInner) { map.removeLayer(routeLayerInner); routeLayerInner = null; }
+    if (destMarker)      { map.removeLayer(destMarker);      destMarker = null; }
+}
+
+// ── OSRM routing (direct fetch, no LRM) ──────────────────────────────────
+function startRoute(destLat, destLon, destName) {
+    currentDestName = destName;
+    document.getElementById('dest-input').value = destName;
+    hideSuggestions();
+    clearRouteLayer();
+    closeSidebar();
+
+    const url = `${OSRM}/${lastLon},${lastLat};${destLon},${destLat}?overview=full&geometries=geojson&steps=true&annotations=false`;
+    console.log('[NAV] Requesting route:', url);
+
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            console.log('[NAV] OSRM response code:', data.code);
+            if (data.code !== 'Ok' || !data.routes || !data.routes.length) {
+                console.error('[NAV] No route returned:', data.code, data.message);
+                alert('Could not find a route. Try a different destination.');
+                return;
+            }
+
+            const route    = data.routes[0];
+            const distKm   = (route.distance / 1000).toFixed(1);
+            const timeMin  = Math.round(route.duration / 60);
+            const timeStr  = timeMin >= 60
+                ? `${Math.floor(timeMin/60)}h ${timeMin % 60}m`
+                : `${timeMin} min`;
+
+            console.log('[NAV] Route found:', distKm, 'km', timeStr);
+
+            // Draw route polyline (glow + solid)
+            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+            routeLayerOuter = L.polyline(coords, { color: '#1565C0', weight: 10, opacity: 0.35 }).addTo(map);
+            routeLayerInner = L.polyline(coords, { color: '#42A5F5', weight: 4,  opacity: 1.0  }).addTo(map);
+
+            // Destination marker
+            destMarker = L.marker([destLat, destLon], {
+                icon: L.divIcon({
+                    className: '',
+                    html: '<div style="background:#E53935;width:24px;height:24px;border-radius:50%;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.5)">📍</div>',
+                    iconSize: [24, 24], iconAnchor: [12, 24],
+                })
+            }).addTo(map);
+
+            // Fit map to route
+            map.fitBounds(L.latLngBounds(coords), { padding: [50, 50] });
+            followMode = false;
+
+            // Populate sidebar
+            buildSidebar(destName, distKm, timeStr, route.legs[0].steps);
+            openSidebar();
+        })
+        .catch(err => {
+            console.error('[NAV] Fetch error:', err);
+            alert('Routing request failed. Check your internet connection.');
+        });
+}
+
+// ── Decode OSRM maneuver type to icon ─────────────────────────────────────
+function maneuverIcon(type, modifier) {
+    const t = (type || '') + ':' + (modifier || '');
+    if (t.includes('turn:left'))         return '↰';
+    if (t.includes('turn:right'))        return '↱';
+    if (t.includes('turn:slight left'))  return '↖';
+    if (t.includes('turn:slight right')) return '↗';
+    if (t.includes('turn:sharp left'))   return '⬅';
+    if (t.includes('turn:sharp right'))  return '➡';
+    if (t.includes('turn:uturn'))        return '↩';
+    if (t.includes('roundabout'))        return '🔄';
+    if (t.includes('arrive'))            return '📍';
+    if (t.includes('depart'))            return '🚲';
+    return '↑';
+}
+
+function fmtDist(m) {
+    return m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────
+function buildSidebar(destName, distKm, timeStr, steps) {
+    document.getElementById('sidebar-dest').textContent    = '→ ' + destName;
+    document.getElementById('sidebar-summary').textContent = distKm + ' km total';
+    document.getElementById('sidebar-eta').textContent     = '⏱ ' + timeStr;
+
+    const list = document.getElementById('steps-list');
+    list.innerHTML = '';
+
+    steps.forEach((step, i) => {
+        const name = step.name || (i === steps.length - 1 ? 'Arrive at destination' : 'Continue');
+        const icon = maneuverIcon(
+            step.maneuver && step.maneuver.type,
+            step.maneuver && step.maneuver.modifier
+        );
+        const dist = fmtDist(step.distance);
+
+        const div = document.createElement('div');
+        div.className = 'step-item' + (i === 0 ? ' active' : '');
+        div.innerHTML = `
+            <div class="step-icon">${icon}</div>
+            <div class="step-text">
+                <div class="step-name">${name}</div>
+                <div class="step-dist">${dist}</div>
+            </div>`;
+        div.addEventListener('click', () => {
+            const loc = step.maneuver && step.maneuver.location;
+            if (loc) map.setView([loc[1], loc[0]], 17, { animate: true });
+            list.querySelectorAll('.step-item').forEach(el => el.classList.remove('active'));
+            div.classList.add('active');
+        });
+        list.appendChild(div);
+    });
+}
+
+function openSidebar()  { document.getElementById('sidebar').classList.add('open'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
+
+function clearRoute() {
+    clearRouteLayer();
+    closeSidebar();
+    document.getElementById('dest-input').value = '';
+    followMode = true;
+}
+
+document.getElementById('clear-btn').addEventListener('click', clearRoute);
+
+// ── Search autocomplete ───────────────────────────────────────────────────
+const input  = document.getElementById('dest-input');
+const sugBox = document.getElementById('suggestions');
+let sugTimer = null;
+
+function hideSuggestions() {
+    sugBox.style.display = 'none';
+    sugBox.innerHTML = '';
+}
+
+input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clearTimeout(sugTimer);
+    if (q.length < 3) { hideSuggestions(); return; }
+
+    sugTimer = setTimeout(() => {
+        const url = `${NOMINATIM}/search?format=json&q=${encodeURIComponent(q)}&limit=6&namedetails=1&accept-language=en`;
+        console.log('[NAV] Geocoding:', q);
+        fetch(url)
+            .then(r => r.json())
+            .then(results => {
+                console.log('[NAV] Nominatim:', results.length, 'results');
+                if (!results.length) { hideSuggestions(); return; }
+                sugBox.innerHTML = '';
+                results.forEach(r => {
+                    const name = (r.namedetails && r.namedetails.name)
+                        ? r.namedetails.name
+                        : r.display_name.split(',')[0];
+                    const div = document.createElement('div');
+                    div.className = 'sug-item';
+                    div.innerHTML = `<span class="sug-main">${name}</span><span class="sug-sub">${r.display_name}</span>`;
+                    div.addEventListener('mousedown', evt => {
+                        evt.preventDefault();
+                        startRoute(parseFloat(r.lat), parseFloat(r.lon), name);
+                    });
+                    sugBox.appendChild(div);
+                });
+                sugBox.style.display = 'block';
+            })
+            .catch(err => { console.error('[NAV] Nominatim error:', err); hideSuggestions(); });
+    }, 350);
+});
+
+input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { hideSuggestions(); return; }
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = sugBox.querySelector('.sug-item');
+        if (first && sugBox.style.display === 'block') {
+            first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            return;
+        }
+        // Direct geocode
+        const q = input.value.trim();
+        if (!q) return;
+        console.log('[NAV] Enter: direct geocode:', q);
+        fetch(`${NOMINATIM}/search?format=json&q=${encodeURIComponent(q)}&limit=1&namedetails=1&accept-language=en`)
+            .then(r => r.json())
+            .then(results => {
+                if (!results.length) { console.warn('[NAV] No results'); return; }
+                const r = results[0];
+                const name = (r.namedetails && r.namedetails.name)
+                    ? r.namedetails.name : r.display_name.split(',')[0];
+                startRoute(parseFloat(r.lat), parseFloat(r.lon), name);
+            })
+            .catch(err => console.error('[NAV] Direct geocode error:', err));
+    }
+});
+
+input.addEventListener('blur', () => setTimeout(hideSuggestions, 180));
+
+// ── Speed limit (Overpass) ────────────────────────────────────────────────
+let limitTimer = null;
+let limitFetchLat = null, limitFetchLon = null;
+
+function fetchSpeedLimit(lat, lon) {
+    if (limitFetchLat !== null) {
+        const d = Math.sqrt(Math.pow(lat-limitFetchLat,2) + Math.pow(lon-limitFetchLon,2)) * 111000;
+        if (d < 30) return;
+    }
+    limitFetchLat = lat; limitFetchLon = lon;
+    const r = 0.0003;
+    const q = `[out:json][timeout:5];way(${lat-r},${lon-r},${lat+r},${lon+r})[highway][maxspeed];out tags 1;`;
+    fetch(`${OVERPASS}?data=${encodeURIComponent(q)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.elements || !data.elements.length) { currentLimit = null; updateLimitUI(null); return; }
+            const tag = data.elements[0].tags.maxspeed;
+            if (!tag) { currentLimit = null; updateLimitUI(null); return; }
+            const num = parseInt(tag, 10);
+            if (isNaN(num)) {
+                const def = { 'MY:urban': 50, 'MY:rural': 90, 'MY:motorway': 110 };
+                currentLimit = def[tag] || null;
+            } else {
+                currentLimit = tag.includes('mph') ? Math.round(num * 1.609) : num;
+            }
+            updateLimitUI(currentLimit);
+        })
+        .catch(() => {});
+}
+
+// ── Compliance UI ─────────────────────────────────────────────────────────
+const signEl       = document.getElementById('speed-limit-sign');
+const limitNumEl   = document.getElementById('limit-number');
+const limitValEl   = document.getElementById('limit-val');
+const complianceEl = document.getElementById('compliance-val');
+const banner       = document.getElementById('over-banner');
+const speedBadge   = document.getElementById('speed-badge');
+
+function updateLimitUI(limit) {
+    if (limit == null) {
+        limitNumEl.textContent = '—';
+        limitValEl.textContent = '—';
+        complianceEl.textContent = '—';
+        complianceEl.className = 'info-value';
+        signEl.className = '';
+        banner.style.display = 'none';
+        speedBadge.style.background = '#1565C0';
+        return;
+    }
+    limitNumEl.textContent = limit;
+    limitValEl.textContent = limit + ' km/h';
+    const pct = limit > 0 ? lastSpeed / limit : 0;
+    if (pct < 0.85) {
+        signEl.className = ''; banner.style.display = 'none';
+        complianceEl.textContent = '✔ OK'; complianceEl.className = 'info-value';
+        speedBadge.style.background = '#1565C0';
+    } else if (pct < 1.0) {
+        signEl.className = 'warning'; banner.style.display = 'none';
+        complianceEl.textContent = '⚡ Near'; complianceEl.className = 'info-value warn';
+        speedBadge.style.background = '#E65100';
+    } else {
+        signEl.className = 'over'; banner.style.display = 'block';
+        complianceEl.textContent = '⚠ OVER!'; complianceEl.className = 'info-value over';
+        speedBadge.style.background = '#B71C1C';
+    }
+}
+
+// ── Position update ───────────────────────────────────────────────────────
+function updatePosition(lat, lon) {
+    lastLat = lat; lastLon = lon;
+    bikeMarker.setLatLng([lat, lon]);
+    bikeCircle.setLatLng([lat, lon]);
+    pushTrail(lat, lon);
+    if (followMode) map.setView([lat, lon], map.getZoom(), { animate: true });
+    clearTimeout(limitTimer);
+    limitTimer = setTimeout(() => fetchSpeedLimit(lat, lon), 1200);
+}
+
+// ── GPS update ────────────────────────────────────────────────────────────
+function onGPS(gps) {
+    lastSpeed = gps.speed_kmh || 0;
+    document.getElementById('speed-value').textContent = Math.round(lastSpeed);
+    document.getElementById('lat-val').textContent     = gps.latitude.toFixed(5);
+    document.getElementById('lon-val').textContent     = gps.longitude.toFixed(5);
+    document.getElementById('spd-val').textContent     = lastSpeed.toFixed(1) + ' km/h';
+    document.getElementById('fix-val').textContent     = '✔ Active';
+    document.getElementById('fix-val').style.color     = '#4CAF50';
+    updateLimitUI(currentLimit);
+    updatePosition(gps.latitude, gps.longitude);
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+const dot   = document.getElementById('ws-dot');
+const label = document.getElementById('ws-label');
+
+function connect() {
+    const ws = new WebSocket(WS_URL);
+    ws.onopen  = () => { dot.classList.add('connected'); label.textContent = 'Live'; };
+    ws.onmessage = e => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.gps) onGPS(data.gps);
+        } catch(_) {}
+    };
+    ws.onclose = () => {
+        dot.classList.remove('connected');
+        label.textContent = 'Reconnecting…';
+        setTimeout(connect, 2000);
+    };
+    ws.onerror = () => ws.close();
+}
+
+connect();
+</script>
+</body>
+</html>

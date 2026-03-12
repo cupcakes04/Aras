@@ -189,11 +189,18 @@ class BEV:
 
     def get_radar_world_points(self, mode: Literal['front', 'back']):
         """
-        Convert latest radar detections (mm, already BEV) to flat-plane world
-        (x, y) metres, corrected for roll/pitch tilt.
-        
-        Front radar: +y forward
-        Back radar:  -y backward (y values negated)
+        Convert latest radar detections (angle/distance polar format) to flat-plane
+        world (x, y) metres, corrected for roll/pitch tilt.
+
+        Radar format:
+          angle    : degrees, -90 (left) to +90 (right)
+          distance : metres
+          direction: True = approaching, False = receding
+          speed    : km/h relative to radar/bike
+          snr      : 0.0-1.0 confidence
+
+        Front radar: +y forward (angle=0 -> straight ahead)
+        Back radar:  -y backward (angle=0 -> straight behind)
 
         Returns list of dict with all original fields plus 'world_x', 'world_y'.
         """
@@ -212,15 +219,19 @@ class BEV:
         targets = history[-1]
         results = []
         for t in targets:
-            x_m = t['x'] * self._scale
-            y_m = t['y'] * self._scale * y_sign  # apply direction
+            angle_rad = math.radians(t['angle'])
+            dist_m = t['distance']
+
+            # Polar to Cartesian: x = lateral, y = forward/back
+            x_m = dist_m * math.sin(angle_rad)
+            y_m = dist_m * math.cos(angle_rad) * y_sign
 
             wx, wy = self._radar_tilt_correction(x_m, y_m, roll, pitch)
 
             results.append({
                 **t,
-                'world_x': float(wx),
-                'world_y': float(wy),
+                'world_x':   float(wx),
+                'world_y':   float(wy),
             })
         return results
 

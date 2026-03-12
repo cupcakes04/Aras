@@ -67,14 +67,30 @@
         .object-item {
             margin: 8px 0;
             padding: 10px;
-            background: rgba(76, 175, 80, 0.1);
-            border-left: 3px solid #4CAF50;
+            background: rgba(33, 150, 243, 0.1);
+            border-left: 3px solid #2196F3;
             border-radius: 4px;
         }
         
         .object-item.tentative {
-            background: rgba(255, 152, 0, 0.1);
-            border-left-color: #FF9800;
+            background: rgba(33, 150, 243, 0.06);
+            border-left-color: #64B5F6;
+        }
+
+        .object-item.back-obj {
+            background: rgba(255, 193, 7, 0.1);
+            border-left-color: #FFC107;
+        }
+
+        .object-item.collision {
+            background: rgba(244, 67, 54, 0.18);
+            border-left-color: #F44336;
+            animation: flash 0.5s infinite alternate;
+        }
+
+        @keyframes flash {
+            from { background: rgba(244, 67, 54, 0.18); }
+            to   { background: rgba(244, 67, 54, 0.45); }
         }
         
         .object-header {
@@ -85,11 +101,19 @@
         
         .object-name {
             font-weight: bold;
-            color: #4CAF50;
+            color: #2196F3;
         }
         
         .object-item.tentative .object-name {
-            color: #FF9800;
+            color: #64B5F6;
+        }
+
+        .object-item.back-obj .object-name {
+            color: #FFC107;
+        }
+
+        .object-item.collision .object-name {
+            color: #F44336;
         }
         
         .object-id {
@@ -321,16 +345,33 @@
         import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
         // Object dimensions (width, height, depth in meters)
+        // Colors are overridden at runtime based on collision state
         const CLASS_DIMENSIONS = {
-            'car': { w: 1.8, h: 1.5, d: 4.5, color: 0x4CAF50 },
-            'van': { w: 2.0, h: 2.2, d: 5.0, color: 0x2196F3 },
-            'truck': { w: 2.5, h: 3.0, d: 8.0, color: 0xFF5722 },
-            'pedestrian': { w: 0.5, h: 1.7, d: 0.3, color: 0xFFEB3B },
-            'person_sitting': { w: 0.5, h: 1.0, d: 0.5, color: 0xFFC107 },
-            'cyclist': { w: 0.6, h: 1.7, d: 1.8, color: 0x9C27B0 },
-            'tram': { w: 2.5, h: 3.5, d: 15.0, color: 0x00BCD4 },
-            'misc': { w: 1.0, h: 1.0, d: 1.0, color: 0x9E9E9E }
+            'car':            { w: 1.8, h: 1.5, d: 4.5 },
+            'van':            { w: 2.0, h: 2.2, d: 5.0 },
+            'truck':          { w: 2.5, h: 3.0, d: 8.0 },
+            'pedestrian':     { w: 0.5, h: 1.7, d: 0.3 },
+            'person_sitting': { w: 0.5, h: 1.0, d: 0.5 },
+            'cyclist':        { w: 0.6, h: 1.7, d: 1.8 },
+            'tram':           { w: 2.5, h: 3.5, d: 15.0 },
+            'misc':           { w: 1.0, h: 1.0, d: 1.0 }
         };
+
+        const COL_NORMAL    = 0x2196F3;  // blue   — front/neutral objects
+        const COL_BACK      = 0xFFC107;  // yellow — back objects
+        const COL_COLLISION = 0xF44336;  // red    — collision alert
+        const COL_HUMAN     = 0x9C27B0;  // purple — pedestrian / person
+
+        const HUMAN_CLASSES = new Set(['pedestrian', 'person_sitting']);
+
+        function isHuman(obj) { return HUMAN_CLASSES.has(obj.name); }
+
+        function objectColor(obj) {
+            if (obj.front_collision || obj.back_collision) return COL_COLLISION;
+            if (isHuman(obj)) return COL_HUMAN;
+            if (obj.world_y < 0) return COL_BACK;
+            return COL_NORMAL;
+        }
         
         // Traffic sign dimensions (octagonal/circular signs on poles)
         const SIGN_DIMENSIONS = {
@@ -423,17 +464,123 @@
         let showTrails = false;
         let showGrid = true;
 
+        // Lane corridor — two parallel blue lines + forward arrows
+        const LANE_HALF_WIDTH = 1.0;  // must match system.py
+        const LANE_LENGTH     = 30;   // metres drawn ahead and behind
+        const laneGroup = new THREE.Group();
+
+        function buildLane() {
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x1565C0, linewidth: 2 });
+
+            // Left line
+            const lGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-LANE_HALF_WIDTH, 0.02, -LANE_LENGTH),
+                new THREE.Vector3(-LANE_HALF_WIDTH, 0.02,  LANE_LENGTH)
+            ]);
+            laneGroup.add(new THREE.Line(lGeo, lineMat));
+
+            // Right line
+            const rGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3( LANE_HALF_WIDTH, 0.02, -LANE_LENGTH),
+                new THREE.Vector3( LANE_HALF_WIDTH, 0.02,  LANE_LENGTH)
+            ]);
+            laneGroup.add(new THREE.Line(rGeo, lineMat));
+
+            // Forward arrows along centre (every 5 m, pointing -z = forward)
+            const arrowMat = new THREE.LineBasicMaterial({ color: 0x42A5F5, linewidth: 1 });
+            for (let z = -LANE_LENGTH + 5; z < 0; z += 5) {
+                const pts = [
+                    new THREE.Vector3( 0,      0.02, z + 1.2),
+                    new THREE.Vector3( 0,      0.02, z),
+                    new THREE.Vector3(-0.3,    0.02, z + 0.6),
+                    new THREE.Vector3( 0,      0.02, z),
+                    new THREE.Vector3( 0.3,    0.02, z + 0.6),
+                    new THREE.Vector3( 0,      0.02, z),
+                ];
+                const geo = new THREE.BufferGeometry().setFromPoints(pts);
+                laneGroup.add(new THREE.Line(geo, arrowMat));
+            }
+            scene.add(laneGroup);
+        }
+        buildLane();
+
+        // Back radar cone: ±20° fan drawn on the ground behind the bike
+        function buildBackCone() {
+            const CONE_RANGE = 20;   // metres depth
+            const CONE_ANGLE = 20;   // degrees half-angle
+            const segments   = 24;
+            const angleRad   = THREE.MathUtils.degToRad(CONE_ANGLE);
+
+            const coneMat = new THREE.MeshBasicMaterial({
+                color: 0xFFA726,
+                transparent: true,
+                opacity: 0.10,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const edgeMat = new THREE.LineBasicMaterial({
+                color: 0xFFA726,
+                transparent: true,
+                opacity: 0.55
+            });
+
+            // Build fan vertices in XZ plane (back = +z in Three.js)
+            const verts = [0, 0.012, 0];
+            for (let i = 0; i <= segments; i++) {
+                const a = -angleRad + (2 * angleRad * i / segments);
+                verts.push(Math.sin(a) * CONE_RANGE, 0.012, Math.cos(a) * CONE_RANGE);
+            }
+            const indices = [];
+            for (let i = 0; i < segments; i++) {
+                indices.push(0, i + 1, i + 2);
+            }
+            const fanGeo = new THREE.BufferGeometry();
+            fanGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+            fanGeo.setIndex(indices);
+            fanGeo.computeVertexNormals();
+            scene.add(new THREE.Mesh(fanGeo, coneMat));
+
+            // Left and right bounding rays
+            const leftAngle  = -angleRad;
+            const rightAngle =  angleRad;
+            const leftGeo  = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0.015, 0),
+                new THREE.Vector3(Math.sin(leftAngle)  * CONE_RANGE, 0.015, Math.cos(leftAngle)  * CONE_RANGE)
+            ]);
+            const rightGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0.015, 0),
+                new THREE.Vector3(Math.sin(rightAngle) * CONE_RANGE, 0.015, Math.cos(rightAngle) * CONE_RANGE)
+            ]);
+            scene.add(new THREE.Line(leftGeo,  edgeMat));
+            scene.add(new THREE.Line(rightGeo, edgeMat));
+
+            // Arc at far end
+            const arcPts = [];
+            for (let i = 0; i <= segments; i++) {
+                const a = -angleRad + (2 * angleRad * i / segments);
+                arcPts.push(new THREE.Vector3(
+                    Math.sin(a) * CONE_RANGE, 0.015, Math.cos(a) * CONE_RANGE
+                ));
+            }
+            scene.add(new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints(arcPts), edgeMat
+            ));
+        }
+        buildBackCone();
+
         // Create object mesh
         function createObjectMesh(objData) {
-            const dims = CLASS_DIMENSIONS[objData.name] || CLASS_DIMENSIONS['misc'];
+            const dims  = CLASS_DIMENSIONS[objData.name] || CLASS_DIMENSIONS['misc'];
+            const color = objectColor(objData);
+            const human = isHuman(objData);
             
             const geometry = new THREE.BoxGeometry(dims.w, dims.h, dims.d);
             const material = new THREE.MeshStandardMaterial({
-                color: dims.color,
+                color,
                 transparent: true,
-                opacity: objData.state === 'tentative' ? 0.5 : 0.8,
-                emissive: dims.color,
-                emissiveIntensity: 0.2
+                opacity: objData.state === 'tentative' ? 0.45 : 0.82,
+                emissive: color,
+                emissiveIntensity: human ? 0.5 : 0.25
             });
             
             const mesh = new THREE.Mesh(geometry, material);
@@ -444,15 +591,30 @@
             // Three.js: x=x, y=height/2, z=-y (flip y to z, negate for forward)
             mesh.position.set(objData.world_x, dims.h / 2, -objData.world_y);
             
-            // Wireframe outline
+            // Wireframe outline — thicker + brighter purple for humans
             const edges = new THREE.EdgesGeometry(geometry);
             const lineMaterial = new THREE.LineBasicMaterial({
-                color: 0xffffff,
+                color: human ? COL_HUMAN : 0xffffff,
                 transparent: true,
-                opacity: 0.3
+                opacity: human ? 0.95 : 0.3
             });
             const wireframe = new THREE.LineSegments(edges, lineMaterial);
             mesh.add(wireframe);
+
+            // Extra scaled outline shell for humans (halo effect)
+            if (human) {
+                const outlineGeo = new THREE.BoxGeometry(
+                    dims.w * 1.18, dims.h * 1.08, dims.d * 1.18
+                );
+                const outlineMat = new THREE.MeshBasicMaterial({
+                    color: COL_HUMAN,
+                    side: THREE.BackSide,
+                    transparent: true,
+                    opacity: 0.35
+                });
+                const outline = new THREE.Mesh(outlineGeo, outlineMat);
+                mesh.add(outline);
+            }
             
             return mesh;
         }
@@ -529,24 +691,33 @@
             return group;
         }
 
+        // Flashing state for collision objects
+        let flashState = false;
+        setInterval(() => { flashState = !flashState; }, 400);
+
         // Update tracked objects
         function updateObjects(data) {
             const currentIds = new Set();
             
             data.forEach(obj => {
                 currentIds.add(obj.id);
+                const color  = objectColor(obj);
+                const dims   = CLASS_DIMENSIONS[obj.name] || CLASS_DIMENSIONS['misc'];
+                const isCollision = obj.front_collision || obj.back_collision;
                 
                 if (trackedObjects.has(obj.id)) {
                     // Update existing object
                     const tracked = trackedObjects.get(obj.id);
-                    const dims = CLASS_DIMENSIONS[obj.name] || CLASS_DIMENSIONS['misc'];
                     
                     // Smooth position update
                     tracked.mesh.position.x = obj.world_x;
                     tracked.mesh.position.z = -obj.world_y;
                     
-                    // Update opacity based on state
-                    tracked.mesh.material.opacity = obj.state === 'tentative' ? 0.5 : 0.8;
+                    // Update colour + flash
+                    tracked.mesh.material.color.setHex(color);
+                    tracked.mesh.material.emissive.setHex(color);
+                    tracked.mesh.material.emissiveIntensity = isCollision && flashState ? 0.9 : 0.25;
+                    tracked.mesh.material.opacity = obj.state === 'tentative' ? 0.45 : 0.82;
                     
                     // Update label
                     if (tracked.label) {
@@ -570,8 +741,8 @@
                     const mesh = createObjectMesh(obj);
                     scene.add(mesh);
                     
-                    const dims = CLASS_DIMENSIONS[obj.name] || CLASS_DIMENSIONS['misc'];
-                    const label = createLabel(`${obj.name} #${obj.id}`, dims.color);
+                    const labelText = isCollision ? `⚠ ${obj.name} #${obj.id}` : `${obj.name} #${obj.id}`;
+                    const label = createLabel(labelText, color);
                     label.position.set(obj.world_x, dims.h + 0.5, -obj.world_y);
                     if (showLabels) scene.add(label);
                     
@@ -582,7 +753,7 @@
                         const positions = [new THREE.Vector3(obj.world_x, 0.1, -obj.world_y)];
                         const geometry = new THREE.BufferGeometry().setFromPoints(positions);
                         const material = new THREE.LineBasicMaterial({
-                            color: dims.color,
+                            color,
                             transparent: true,
                             opacity: 0.5
                         });
@@ -666,33 +837,46 @@
             objectsList.innerHTML = '';
             
             [...confirmed, ...tentative].forEach(obj => {
+                const isCollision = obj.front_collision || obj.back_collision;
+                const isBack      = obj.world_y < 0;
+                let cls = `object-item ${obj.state}`;
+                if (isCollision) cls += ' collision';
+                else if (isBack) cls += ' back-obj';
+
                 const div = document.createElement('div');
-                div.className = `object-item ${obj.state}`;
+                div.className = cls;
                 
                 const speed = Math.sqrt(obj.vx * obj.vx + obj.vy * obj.vy);
                 
+                const radarSpeedStr = obj.radar_speed != null
+                    ? `${obj.radar_speed.toFixed(1)} km/h ${obj.radar_direction ? '▼ approaching' : '▲ receding'}`
+                    : '—';
+
+                const collisionTag = obj.front_collision ? ' 🔴 FRONT COLLISION'
+                                   : obj.back_collision  ? ' 🔴 BACK COLLISION'
+                                   : '';
+                
                 div.innerHTML = `
                     <div class="object-header">
-                        <span class="object-name">${obj.name}</span>
+                        <span class="object-name">${obj.name}${collisionTag}</span>
                         <span class="object-id">ID: ${obj.id}</span>
                     </div>
                     <div class="object-details">
-                        Position: (${obj.world_x.toFixed(2)}, ${obj.world_y.toFixed(2)})m<br>
-                        Velocity: ${speed.toFixed(2)} m/s<br>
-                        Confidence: ${obj.confidence.toFixed(2)}<br>
-                        Hits: ${obj.hits}
+                        Side: ${obj.world_y >= 0 ? 'front' : 'back'} &nbsp;
+                        Pos: (${obj.world_x.toFixed(2)}, ${obj.world_y.toFixed(2)})m<br>
+                        Tracker vel: ${speed.toFixed(2)} m/s<br>
+                        Radar speed: ${radarSpeedStr}<br>
+                        Confidence: ${obj.confidence.toFixed(2)} &nbsp; Hits: ${obj.hits}
                     </div>
                 `;
                 
                 objectsList.appendChild(div);
             });
             
-            // Add traffic signs section
+            // Traffic signs section
             if (signs && signs.length > 0) {
                 const signsHeader = document.createElement('div');
-                signsHeader.style.marginTop = '15px';
-                signsHeader.style.fontWeight = 'bold';
-                signsHeader.style.color = '#FFD700';
+                signsHeader.style.cssText = 'margin-top:15px;font-weight:bold;color:#FFD700;';
                 signsHeader.textContent = `Traffic Signs (${signs.length})`;
                 objectsList.appendChild(signsHeader);
                 
@@ -704,11 +888,11 @@
                     
                     div.innerHTML = `
                         <div class="object-header">
-                            <span class="object-name" style="color: #FFD700;">${sign.name}</span>
+                            <span class="object-name" style="color:#FFD700;">${sign.name}</span>
                             <span class="object-id">ID: ${sign.id}</span>
                         </div>
                         <div class="object-details">
-                            Position: (${sign.world_x.toFixed(2)}, ${sign.world_y.toFixed(2)})m<br>
+                            Pos: (${sign.world_x.toFixed(2)}, ${sign.world_y.toFixed(2)})m<br>
                             Confidence: ${sign.confidence.toFixed(2)}
                         </div>
                     `;

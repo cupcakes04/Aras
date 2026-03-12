@@ -10,6 +10,6 @@ unga bunga neuron activation
 
 lol there is signs now
 
-![alt text](./assets/image_4.png)
+![alt text](./assets/dashboard.png)
 
-wtf
+split view for both collision and navigation

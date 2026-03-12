@@ -1,11 +1,11 @@
 import asyncio
-import math
-from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker
+from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
 from BEV import BEV
 from tracker import TrackManager
 from app.visualisation import Visualisation
 
 # https://github.com/cupcakes04/Aras
+
 
 class System:
 
@@ -21,6 +21,7 @@ class System:
         self.vibrator_left = Vibrator(max_history=10)
         self.vibrator_right = Vibrator(max_history=10)
         self.speaker = Speaker(max_history=10)
+        self.gps = GPS(max_history=10)
 
         # Configure radar and cam to Bird's eye view (top down)
         self.bev = BEV(
@@ -104,7 +105,7 @@ class System:
     async def generate_world_objects(self):
         """
         Generate unified object list from camera and radar with two-level fusion:
-        1. Radar-confirmed objects (high confidence)
+        1. Radar-confirmed objects (high confidence, snr used directly as confidence)
         2. Camera-only objects (lower confidence)
         
         Also processes traffic signs separately (camera-only, no radar fusion).
@@ -127,46 +128,14 @@ class System:
         obj_id = 0
         matched_cam_indices = set()
 
-        # Level 1: Radar-confirmed objects (merge with camera if available)
-        # Group radar targets by distance resolution cells to avoid duplicates
-        # Use 2D gating: range resolution (radial) + spatial threshold (lateral)
-        radar_groups = []
+        # Level 1: Radar-confirmed objects (fuse with closest camera detection)
         for radar in radar_targets:
-            dist_res = radar.get('dist_res', 0)
-            if dist_res <= 0:
+            snr = radar.get('snr', 0.0)
+            if snr <= 0.0:
                 continue  # Invalid detection
-            
-            # Check if this radar target is within resolution cell of any existing group
-            rx, ry = radar['world_x'], radar['world_y']
-            r_dist = (rx**2 + ry**2)**0.5
-            
-            merged = False
-            for group in radar_groups:
-                gx, gy = group['world_x'], group['world_y']
-                g_dist = (gx**2 + gy**2)**0.5
-                
-                range_gate = dist_res / 1000.0  # radial resolution in metres
-                spatial_gate = 1.0  # lateral separation threshold in metres
-                
-                # 2D gating: range difference AND spatial distance
-                range_diff = abs(r_dist - g_dist)
-                euclidean_dist = ((rx - gx)**2 + (ry - gy)**2)**0.5
-                
-                if range_diff < range_gate and euclidean_dist < spatial_gate:
-                    # Keep the one with better dist_res (smaller = better)
-                    if dist_res < group.get('dist_res', float('inf')):
-                        group.update(radar)
-                    merged = True
-                    break
-            
-            if not merged:
-                radar_groups.append(radar.copy())
 
-        # Now fuse each radar group with closest camera detection
-        for radar in radar_groups:
             rx, ry = radar['world_x'], radar['world_y']
-            dist_res_m = radar['dist_res'] / 1000.0  # mm to m
-            
+
             best_match = None
             best_match_idx = None
             best_dist = 1.0  # matching threshold in metres
@@ -181,22 +150,8 @@ class System:
                     best_match = cam
                     best_match_idx = idx
 
-            # Confidence as relative quality weight from dist_res
-            # Better (smaller) dist_res = higher weight
-            # Normalize to typical range: 50mm (excellent) to 500mm (poor)
-            # Use logarithmic scale to avoid artificial bounds
-            dist_res_mm = radar['dist_res']
-            if dist_res_mm < 50:
-                quality = 1.0
-            elif dist_res_mm > 500:
-                quality = 0.2
-            else:
-                # Logarithmic interpolation
-                quality = 1.0 - 0.8 * (math.log(dist_res_mm / 50) / math.log(10))
-            
             # Boost confidence if matched with camera
-            confidence = quality * 1.2 if best_match else quality
-            confidence = min(1.0, confidence)  # clamp to 1.0
+            confidence = min(1.0, snr * 1.2) if best_match else snr
 
             obj = {
                 'id': obj_id,
@@ -205,10 +160,12 @@ class System:
                 'world_y': ry,
                 'confidence': confidence,
                 'cam_only': False,
+                'radar_speed': radar['speed'],
+                'radar_direction': radar['direction'],
             }
             objects.append(obj)
             obj_id += 1
-            
+
             if best_match_idx is not None:
                 matched_cam_indices.add(best_match_idx)
 
@@ -224,6 +181,8 @@ class System:
                 'world_y': cam['world_y'],
                 'confidence': 0.4,  # Lower confidence without radar confirmation
                 'cam_only': True,
+                'radar_speed': None,
+                'radar_direction': None,
             }
             objects.append(obj)
             obj_id += 1
@@ -248,63 +207,72 @@ class System:
 
     async def collision_detector(self):
         """
-        Detect front/side collision threats using tracked objects.
+        Detect collision threats using tracked objects and TTC (Time-To-Collision).
+
+        Front lane  : parallel corridor ±LANE_HALF_WIDTH metres either side of bike.
+                      Object speed = Kalman vy (m/s, seeded from radar when available).
+                      TTC = y / |vy|.  If TTC < TTC_THRESHOLD → collision alert.
+                      Actuators (vibrator + brake actuator) fire on front collision only.
+
+        Back lane   : same corridor behind bike (y < 0, approaching = vy > 0).
+                      No actuators — sets a per-object 'back_collision' flag for UI.
+
+        Each tracked object gets two annotation fields written onto its dict:
+          'front_collision' : bool
+          'back_collision'  : bool
+        These are forwarded to the visualisation WebSocket payload.
         """
+        LANE_HALF_WIDTH = 1.0   # metres either side of centre line
+        TTC_THRESHOLD   = 2.0   # seconds — alert if time-to-collision is below this
+
         # Get raw detections and update tracker
         tracked_objects = self.tracker.update(self.objects)
 
-        # Collision zones (bike-centric frame: +y forward, +x right)
-        # Front: y > 0.5, |x| < 1.0
-        # Left:  x < -0.3, y > 0
-        # Right: x > 0.3,  y > 0
-        front_threat = False
-        side_threat_left = False
-        side_threat_right = False
-        closest_front_dist = float('inf')
-        front_confidence = 0.0
+        front_collision = False
+        best_ttc        = float('inf')
+        best_conf       = 0.0
 
         for obj in tracked_objects:
-            x, y = obj['world_x'], obj['world_y']
-            dist = (x**2 + y**2)**0.5
-            conf = obj['confidence']
+            x,  y  = obj['world_x'], obj['world_y']
+            vx, vy = obj['vx'],      obj['vy']
+            conf   = obj['confidence']
 
-            # Only consider high-confidence detections for collision
+            obj['front_collision'] = False
+            obj['back_collision']  = False
+
             if conf < 0.3:
                 continue
 
-            # Front zone
-            if y > 0.5 and abs(x) < 1.0:
-                front_threat = True
-                if dist < closest_front_dist:
-                    closest_front_dist = dist
-                    front_confidence = conf
+            # Only objects within the lane corridor (parallel lines, not a cone)
+            if abs(x) > LANE_HALF_WIDTH:
+                continue
 
-            # Left side
-            if x < -0.3 and y > 0 and dist < 2.0:
-                side_threat_left = True
+            # ── Front objects (y > 0, approaching means vy < 0) ──────────────
+            if y > 0 and vy < 0:
+                ttc = y / abs(vy)
+                if ttc < TTC_THRESHOLD:
+                    obj['front_collision'] = True
+                    front_collision = True
+                    if ttc < best_ttc:
+                        best_ttc  = ttc
+                        best_conf = conf
 
-            # Right side
-            if x > 0.3 and y > 0 and dist < 2.0:
-                side_threat_right = True
+            # ── Back objects (y < 0, approaching means vy > 0) ───────────────
+            elif y < 0 and vy > 0:
+                ttc = abs(y) / vy
+                if ttc < TTC_THRESHOLD:
+                    obj['back_collision'] = True
 
-        # Update actuator command (extend if front threat detected)
-        self._actuator_cmd = front_threat
+        # ── Actuator outputs (front only) ─────────────────────────────────────
+        self._actuator_cmd = front_collision
 
-        # Update vibrator intensity based on proximity and confidence
-        if front_threat and closest_front_dist < float('inf'):
-            # Closer = stronger vibration, weighted by confidence
-            base_intensity = max(0.0, min(1.0, 3.0 / closest_front_dist - 0.5))
-            intensity = base_intensity * front_confidence
-            self._vibrator_left_cmd = intensity
+        if front_collision:
+            # Intensity scales with urgency: lower TTC = higher intensity
+            intensity = min(1.0, best_conf * (TTC_THRESHOLD / max(best_ttc, 0.1)))
+            self._vibrator_left_cmd  = intensity
             self._vibrator_right_cmd = intensity
-        elif side_threat_left:
-            self._vibrator_left_cmd = 0.3
-            self._vibrator_right_cmd = 0.0
-        elif side_threat_right:
-            self._vibrator_left_cmd = 0.0
-            self._vibrator_right_cmd = 0.3
         else:
-            self._vibrator_left_cmd = 0.0
+            self._vibrator_left_cmd  = 0.0
             self._vibrator_right_cmd = 0.0
         
         # Update collision state for visualization
@@ -317,6 +285,9 @@ class System:
             'vibrator_left': self._vibrator_left_cmd,
             'vibrator_right': self._vibrator_right_cmd
         }
+
+        # Store annotated tracked objects for visualisation broadcast
+        self.tracked_objects = tracked_objects
 
 
     # |-------------------------------------------------------------|
@@ -344,6 +315,7 @@ class System:
             self.assign_task(self.imu.read, period=0.01),
             self.assign_task(self.radar_front.read, period=0.05),
             self.assign_task(self.radar_back.read, period=0.05),
+            self.assign_task(self.gps.read, period=1.0),
 
             # Processing
             self.assign_task(self.generate_world_objects, period=0.05),

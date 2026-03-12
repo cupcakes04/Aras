@@ -9,16 +9,17 @@ class Radar(History):
     Radar
     - functions in reading every detected objects 
     - data of 
-        - (x,y)
-        - speed and 
-        - distance resolution
+        - angle  : degrees, -90 (left) to +90 (right)
+        - distance: metres
+        - direction: True = approaching, False = receding
+        - speed  : km/h (relative to radar/bike)
+        - snr    : 0.0-1.0 normalised signal-to-noise ratio (confidence)
     
-    Example output from a library function like radar.get_targets(), each id can have multiple dicts
+    Example output:
     ```python
         [
-            {'id': 1, 'x': -150, 'y': 1200, 'speed': 25, 'dist_res': 360}, 
-            {'id': 2, 'x': 500,  'y': 3000, 'speed': 0,  'dist_res': 360},
-            {'id': 3, 'x': 0,    'y': 0,    'speed': 0,  'dist_res': 0} # 0 means no person
+            {'angle': 30,  'distance': 10, 'direction': True,  'speed': 50, 'snr': 0.6},
+            {'angle': -15, 'distance': 5,  'direction': False, 'speed': 10, 'snr': 0.9},
         ]
     ```
     """
@@ -34,9 +35,8 @@ class Radar(History):
     async def read(self):
         # 1. Read the sensor values (placeholder)
         value = [
-            {'id': 1, 'x': -150, 'y': 1200, 'speed': 25, 'dist_res': 360}, 
-            {'id': 2, 'x': 500,  'y': 3000, 'speed': 0,  'dist_res': 360},
-            {'id': 3, 'x': 0,    'y': 0,    'speed': 0,  'dist_res': 0} # 0 means no person
+            {'angle': 30,  'distance': 10, 'direction': True,  'speed': 2, 'snr': 0.6},
+            {'angle': -15, 'distance': 5,  'direction': False, 'speed': 1, 'snr': 0.9},
         ]
 
         # 2. Record the action in history

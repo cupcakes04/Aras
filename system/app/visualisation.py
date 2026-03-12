@@ -37,16 +37,19 @@ class Visualisation:
         """Continuously broadcast tracking data to all connected clients."""
         while True:
             if self.clients:
-                # Get tracked objects and traffic signs from system
-                tracks = self.system.tracker.get_all_tracks()
+                # Use annotated tracked objects (with collision flags) from collision_detector
+                tracks = getattr(self.system, 'tracked_objects', self.system.tracker.get_all_tracks())
                 signs = self.system.traffic_signs
-                collision = self.system.collision_state
+
+                # Latest GPS fix (None if no reading yet)
+                gps_history = self.system.gps.history.get('values', [])
+                gps = gps_history[-1] if gps_history else None
                 
                 # Prepare data payload
                 data = {
                     'tracks': tracks,
                     'signs': signs,
-                    'collision': collision,
+                    'gps': gps,
                     'timestamp': asyncio.get_event_loop().time()
                 }
                 
