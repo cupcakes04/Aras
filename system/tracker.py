@@ -96,16 +96,21 @@ class Track:
         Track._next_id += 1
         
         self.kf = KalmanFilter(dt=dt)
+        radar_speed = detection.get('radar_speed')
+        radar_direction = detection.get('radar_direction')
+        vy_init = self._radar_vy(detection['world_y'], radar_speed, radar_direction)
         self.kf.x = np.array([
             detection['world_x'],
             detection['world_y'],
-            0.0,  # initial velocity unknown
-            0.0
+            0.0,
+            vy_init,
         ])
         
         self.name = detection['name']
         self.cam_only = detection['cam_only']
         self.confidence = detection['confidence']
+        self.radar_speed = radar_speed
+        self.radar_direction = radar_direction
         
         # Lifecycle management
         self.hits = 1  # number of consecutive detections
@@ -116,6 +121,23 @@ class Track:
         # Track state
         self.state = 'tentative'  # tentative -> confirmed -> deleted
         
+    @staticmethod
+    def _radar_vy(world_y: float, radar_speed, radar_direction) -> float:
+        """
+        Convert radar speed (km/h) + direction into an initial vy estimate (m/s).
+        direction=True (approaching): object closes on bike, so vy opposes its y-position.
+        direction=False (receding):   object moves away, so vy follows its y-position sign.
+        Returns 0.0 if radar data is unavailable.
+        """
+        if radar_speed is None or radar_speed <= 0:
+            return 0.0
+        speed_ms = radar_speed / 3.6  # km/h -> m/s
+        y_sign = 1.0 if world_y >= 0 else -1.0
+        if radar_direction is True:
+            return -y_sign * speed_ms  # approaching: closing velocity
+        else:
+            return y_sign * speed_ms   # receding: opening velocity
+
     def predict(self):
         """Predict next state."""
         self.kf.predict()
@@ -137,6 +159,14 @@ class Track:
         self.name = detection['name']
         self.cam_only = detection['cam_only']
         self.confidence = detection['confidence']
+        self.radar_speed = detection.get('radar_speed')
+        self.radar_direction = detection.get('radar_direction')
+
+        # Nudge Kalman vy toward radar-derived velocity when radar data is present
+        vy_radar = self._radar_vy(detection['world_y'], self.radar_speed, self.radar_direction)
+        if vy_radar != 0.0:
+            alpha = 0.3  # blend weight: 30% radar hint, 70% filter estimate
+            self.kf.x[3] = (1 - alpha) * self.kf.x[3] + alpha * vy_radar
         
         # Update lifecycle
         self.hits += 1
@@ -178,6 +208,8 @@ class Track:
             'vy': float(vy),
             'confidence': self.confidence,
             'cam_only': self.cam_only,
+            'radar_speed': self.radar_speed,
+            'radar_direction': self.radar_direction,
             'hits': self.hits,
             'misses': self.misses,
             'age': self.age,

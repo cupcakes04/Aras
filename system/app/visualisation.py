@@ -37,8 +37,8 @@ class Visualisation:
         """Continuously broadcast tracking data to all connected clients."""
         while True:
             if self.clients:
-                # Get tracked objects and traffic signs from system
-                tracks = self.system.tracker.get_all_tracks()
+                # Use annotated tracked objects (with collision flags) from collision_detector
+                tracks = getattr(self.system, 'tracked_objects', self.system.tracker.get_all_tracks())
                 signs = self.system.traffic_signs
                 
                 # Prepare data payload
