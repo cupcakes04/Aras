@@ -109,7 +109,7 @@ class GNSS:
     # Public methods
     # ------------------------------------------------------------------
 
-    def read_nmea_data(self) -> str | None:
+    def read_nmea_data(self) -> str:
         """
         Drain available UART bytes and attempt to extract one NMEA sentence.
 
@@ -179,7 +179,7 @@ class GNSS:
             "longitude": self._longitude,
         }
 
-    def get_speed(self) -> float | None:
+    def get_speed(self) -> float:
         """
         Return the most recently received valid ground speed in km/h.
 

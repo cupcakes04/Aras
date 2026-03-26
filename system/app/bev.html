@@ -24,6 +24,16 @@
             position: relative;
         }
         
+        #canvas-2d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none; /* hidden by default */
+            z-index: 1; /* Keep below UI controls */
+        }
+        
         #info-panel {
             position: absolute;
             top: 20px;
@@ -37,6 +47,7 @@
             overflow-y: auto;
             font-size: 14px;
             backdrop-filter: blur(10px);
+            z-index: 100;
         }
         
         #info-panel h2 {
@@ -159,6 +170,7 @@
             border-radius: 8px;
             border: 1px solid #333;
             backdrop-filter: blur(10px);
+            z-index: 100;
         }
         
         .control-group {
@@ -302,7 +314,10 @@
     </style>
 </head>
 <body>
-    <div id="canvas-container"></div>
+    <div id="canvas-container">
+        <!-- The WebGL renderer canvas will be appended here by Three.js -->
+        <canvas id="canvas-2d"></canvas>
+    </div>
     
     <div class="connection-status disconnected" id="connection-status">
         ● DISCONNECTED
@@ -346,8 +361,10 @@
             <div id="objects-list"></div>
         </div>
     </div>
-    
     <div id="controls">
+        <div class="control-group">
+            <button id="toggle-mode" style="background: #2196F3;">Switch to 2D Mode</button>
+        </div>
         <div class="control-group">
             <button id="reset-camera">Reset Camera</button>
             <button id="toggle-grid" class="secondary">Toggle Grid</button>
@@ -398,6 +415,208 @@
         // Values dynamically overwritten by WebSocket config
         let SIGN_DIMENSIONS = {};
         let DEFAULT_SIGN_DIMENSION = { w: 0.6, h: 2.0, d: 0.05, color: 0x888888 }; // Fallback before WS connects
+
+        let renderMode = '3d'; // '3d' or '2d'
+        
+        // ── 2D Canvas Setup ──────────────────────────────────────────────────
+        const canvas2d = document.getElementById('canvas-2d');
+        const ctx = canvas2d.getContext('2d');
+        
+        // 2D Pan and Zoom state
+        let scale2D = 20; // pixelsPerMeter
+        let panX = 0;
+        let panY = 0;
+        let isDragging2D = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        function resizeCanvas2D() {
+            canvas2d.width = window.innerWidth;
+            canvas2d.height = window.innerHeight;
+            // Reset pan to center on resize
+            panX = canvas2d.width / 2;
+            panY = canvas2d.height * 0.75;
+        }
+        
+        // Initialize canvas size and pan offsets
+        canvas2d.width = window.innerWidth;
+        canvas2d.height = window.innerHeight;
+        panX = canvas2d.width / 2;
+        panY = canvas2d.height * 0.75;
+
+        // 2D Controls Event Listeners
+        canvas2d.addEventListener('mousedown', (e) => {
+            isDragging2D = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        canvas2d.addEventListener('mousemove', (e) => {
+            if (isDragging2D) {
+                const dx = e.clientX - lastMouseX;
+                const dy = e.clientY - lastMouseY;
+                panX += dx;
+                panY += dy;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
+        });
+
+        canvas2d.addEventListener('mouseup', () => {
+            isDragging2D = false;
+        });
+        
+        canvas2d.addEventListener('mouseleave', () => {
+            isDragging2D = false;
+        });
+
+        canvas2d.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            // Zoom factor
+            const zoomAmount = 0.1;
+            const direction = e.deltaY < 0 ? 1 : -1;
+            
+            // Get mouse position relative to canvas
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            
+            // Calculate mouse position relative to the current pan offset
+            const oldScale = scale2D;
+            const newScale = Math.max(5, Math.min(100, scale2D * (1 + direction * zoomAmount)));
+            
+            // Adjust pan so we zoom in/out centering around the mouse cursor
+            const scaleRatio = newScale / oldScale;
+            panX = mouseX - (mouseX - panX) * scaleRatio;
+            panY = mouseY - (mouseY - panY) * scaleRatio;
+            
+            scale2D = newScale;
+        }, { passive: false });
+
+        function draw2DScene(data, signs) {
+            ctx.clearRect(0, 0, canvas2d.width, canvas2d.height);
+            
+            const cx = panX;
+            const cy = panY;
+            
+            // Draw Grid
+            if (showGrid) {
+                ctx.strokeStyle = '#222';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                // Vertical lines (fixed grid bounds based on arbitrary large sizes)
+                for (let x = -100; x <= 100; x += 5) {
+                    ctx.moveTo(cx + x * scale2D, -canvas2d.height * 2);
+                    ctx.lineTo(cx + x * scale2D, canvas2d.height * 2);
+                }
+                // Horizontal lines
+                for (let y = -50; y <= 150; y += 5) {
+                    ctx.moveTo(-canvas2d.width * 2, cy - y * scale2D);
+                    ctx.lineTo(canvas2d.width * 2, cy - y * scale2D);
+                }
+                ctx.stroke();
+            }
+
+            // Draw Lane
+            ctx.strokeStyle = '#1565C0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - LANE_HALF_WIDTH * scale2D, -canvas2d.height * 2);
+            ctx.lineTo(cx - LANE_HALF_WIDTH * scale2D, canvas2d.height * 2);
+            ctx.moveTo(cx + LANE_HALF_WIDTH * scale2D, -canvas2d.height * 2);
+            ctx.lineTo(cx + LANE_HALF_WIDTH * scale2D, canvas2d.height * 2);
+            ctx.stroke();
+            
+            // Draw Trails
+            if (showTrails) {
+                trails.forEach(trail => {
+                    ctx.beginPath();
+                    ctx.strokeStyle = `rgba(255, 255, 255, 0.4)`;
+                    ctx.lineWidth = 2;
+                    let first = true;
+                    trail.positions.forEach(pos => {
+                        const px = cx + pos.x * scale2D;
+                        const py = cy + pos.z * scale2D; // z is -y in 3D
+                        if (first) { ctx.moveTo(px, py); first = false; }
+                        else { ctx.lineTo(px, py); }
+                    });
+                    ctx.stroke();
+                });
+            }
+
+            // Draw Traffic Signs
+            signs.forEach(sign => {
+                const px = cx + sign.world_x * scale2D;
+                const py = cy - sign.world_y * scale2D;
+                
+                const dims = SIGN_DIMENSIONS[sign.name] || DEFAULT_SIGN_DIMENSION;
+                ctx.fillStyle = '#' + dims.color.toString(16).padStart(6, '0');
+                
+                // Draw pole and sign
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(3, 6 * (scale2D/20)), 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                if (showLabels) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(sign.name, px, py - 12 * (scale2D/20));
+                }
+            });
+
+            // Draw Tracked Objects
+            data.forEach(obj => {
+                const px = cx + obj.world_x * scale2D;
+                const py = cy - obj.world_y * scale2D;
+                const dims = CLASS_DIMENSIONS[obj.name] || DEFAULT_CLASS_DIMENSION;
+                
+                const w = dims.w * scale2D;
+                const h = dims.d * scale2D; // Use depth for length in top-down view
+                
+                const colorHex = objectColor(obj);
+                const isHumanObj = isHuman(obj);
+                
+                ctx.save();
+                ctx.translate(px, py);
+                
+                // Draw Box
+                ctx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+                ctx.globalAlpha = obj.state === 'tentative' ? 0.45 : 0.82;
+                
+                if (obj.front_collision || obj.back_collision) {
+                    if (flashState) ctx.globalAlpha = 1.0;
+                }
+                
+                ctx.fillRect(-w/2, -h/2, w, h);
+                
+                // Outline
+                ctx.strokeStyle = isHumanObj ? '#9C27B0' : '#fff';
+                ctx.lineWidth = isHumanObj ? 3 : 1;
+                ctx.globalAlpha = 1.0;
+                ctx.strokeRect(-w/2, -h/2, w, h);
+                
+                ctx.restore();
+
+                if (showLabels) {
+                    const isCollision = obj.front_collision || obj.back_collision;
+                    ctx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'center';
+                    const text = isCollision ? `⚠ ${obj.name} #${obj.id}` : `${obj.name} #${obj.id}`;
+                    ctx.fillText(text, px, py - h/2 - 5);
+                }
+            });
+
+            // Draw Ego Bike
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(cx - 0.3 * scale2D, cy - 0.9 * scale2D, 0.6 * scale2D, 1.8 * scale2D);
+            ctx.strokeStyle = '#fff';
+            ctx.strokeRect(cx - 0.3 * scale2D, cy - 0.9 * scale2D, 0.6 * scale2D, 1.8 * scale2D);
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         // Scene setup
         const scene = new THREE.Scene();
@@ -879,7 +1098,6 @@
                 const collisionTag = obj.front_collision ? ' 🔴 FRONT COLLISION'
                                    : obj.back_collision  ? ' 🔴 BACK COLLISION'
                                    : '';
-                console.log(obj)
                 div.innerHTML = `
                     <div class="object-header">
                         <span class="object-name">${obj.name}${collisionTag}</span>
@@ -1020,6 +1238,10 @@
                 updateInfoPanel(data.tracks, data.signs || []);
                 updateCollisionWarning(data.collision || {});
                 
+                if (renderMode === '2d') {
+                    draw2DScene(data.tracks, data.signs || []);
+                }
+                
                 // Update rate calculation
                 updateCount++;
                 const now = Date.now();
@@ -1076,8 +1298,25 @@
             }
         });
 
+        // Mode Toggle Logic
+        const toggleModeBtn = document.getElementById('toggle-mode');
+        toggleModeBtn.addEventListener('click', () => {
+            if (renderMode === '3d') {
+                renderMode = '2d';
+                toggleModeBtn.textContent = 'Switch to 3D Mode';
+                canvas2d.style.display = 'block';
+                renderer.domElement.style.display = 'none';
+            } else {
+                renderMode = '3d';
+                toggleModeBtn.textContent = 'Switch to 2D Mode';
+                canvas2d.style.display = 'none';
+                renderer.domElement.style.display = 'block';
+            }
+        });
+
         // Handle window resize
         window.addEventListener('resize', () => {
+            resizeCanvas2D();
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1086,8 +1325,12 @@
         // Animation loop
         function animate() {
             requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
+            if (renderMode === '3d') {
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            // 2D is drawn immediately on websocket message, so no constant render loop needed for 2D,
+            // except for flashing animations, which could be handled by forcing a redraw, but we will leave it simple for now.
         }
 
         // Start

@@ -94,7 +94,7 @@ class Radar(History):
         if self._hardware_available:
             self._serial.close()
 
-    def _read_data_frame(self) -> dict | None:
+    def _read_data_frame(self) -> dict:
         """Non-blocking read of one data frame from the UART buffer."""
         if not self._hardware_available:
             return None

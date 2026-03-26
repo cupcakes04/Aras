@@ -1,14 +1,14 @@
 # ARAS Visualization Dashboard
 
 ![alt text](../../assets/dashboard.png)
-![alt text](../../assets/image_3.png)
+![alt text](../../assets/2d_view.png)
 ![alt text](../../assets/image_2.png)
 
 The ARAS Visualization Dashboard is a real-time, browser-based 3D Bird's-Eye-View (BEV) rendering of the environment tracked by the Advanced Rider Assistance System. It is built using Three.js and connects directly to the system's WebSocket server to visualize objects, speeds, collision statuses, and historical tracking trails.
 
 ## 🌟 Key Features
 
-- **Live 3D Rendering (Three.js)**: Full 3D environment with free-camera OrbitControls (pan, zoom, rotate).
+- **Live 3D Rendering (Three.js)**: Full 3D environment with free-camera OrbitControls (pan, zoom, rotate), 2D canvas as provided compromise.
 - **Dynamic Object Styling**:
   - 🔵 **Blue**: Neutral objects in front of the bike.
   - 🟡 **Yellow**: Objects located behind the bike.
@@ -70,11 +70,12 @@ If you are running the system on a device (e.g., Radxa/Raspberry Pi) connected t
    python -m http.server 8080
    ```
 2. **Find the IP Address**: Find the IP address assigned to your bike's device by your phone's hotspot. You can usually find this in your phone's "Hotspot/Tethering" settings under connected devices, or by running `hostname -I` or `ip addr` on the device itself. (e.g., `192.168.43.55`).
+3. **Allow ports**: Allow the HTML server and Websocket server on local machine:
    ```bash
    sudo ufw allow 8080/tcp  # For the HTML server
    sudo ufw allow 8765/tcp  # For the WebSocket server
    ```
-3. **Open on Phone**: Open Chrome/Safari on your phone and navigate to:
+4. **Open on Phone**: Open Chrome/Safari on your phone and navigate to:
    ```text
    http://192.168.43.55:8080
    ```

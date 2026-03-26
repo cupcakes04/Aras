@@ -136,7 +136,7 @@ class Radar:
     # Reading methods (non-blocking)
     # ------------------------------------------------------------------
 
-    def read_data(self) -> dict | None:
+    def read_data(self) -> dict:
         """
         Drain available UART bytes and attempt to parse one radar data frame.
 
@@ -239,7 +239,7 @@ class Radar:
         cmd_value = bytes([max_distance, direction, min_speed, no_target_delay])
         return self._run_config_command(CMD_SET_DETECTION, cmd_value)
 
-    def get_detection_params(self) -> dict | None:
+    def get_detection_params(self) -> dict:
         """
         Read the radar's current detection parameters (cmd 0x0012).
 
@@ -290,7 +290,7 @@ class Radar:
         cmd_value = bytes([trigger_count, snr_threshold, 0x00, 0x00])
         return self._run_config_command(CMD_SET_SENSITIVITY, cmd_value)
 
-    def get_sensitivity(self) -> dict | None:
+    def get_sensitivity(self) -> dict:
         """
         Read the radar's current sensitivity settings (cmd 0x0013).
 
@@ -367,7 +367,7 @@ class Radar:
     # Private: data frame parsing
     # ------------------------------------------------------------------
 
-    def _extract_frame(self) -> dict | None:
+    def _extract_frame(self) -> dict:
         """
         Scan the internal buffer for a complete, valid data output frame.
 
@@ -435,7 +435,7 @@ class Radar:
         """Write a command frame to the UART."""
         self._serial.write(_build_cmd(cmd_word, cmd_value))
 
-    def _read_ack(self, expected_cmd_word: int) -> bytes | None:
+    def _read_ack(self, expected_cmd_word: int) -> bytes:
         """
         Blocking read for a command ACK frame.
 
@@ -535,7 +535,7 @@ class Radar:
 
     def _run_config_command_with_data(
         self, cmd_word: int, cmd_value: bytes
-    ) -> bytes | None:
+    ) -> bytes:
         """
         Full config sequence for commands that return data in the ACK payload.
         Returns the extra ACK data bytes, or None on failure.

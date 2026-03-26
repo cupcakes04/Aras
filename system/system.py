@@ -68,7 +68,7 @@ class System:
         self._actuator_cmd: bool  = False
         self._vibrator_left_cmd: float = 0.0
         self._vibrator_right_cmd: float = 0.0
-        self._speaker_cmd: str | None = None
+        self._speaker_cmd: str = None
         self.objects: list = []
         self.traffic_signs: list = []
         
