@@ -71,6 +71,17 @@ class System:
         self._speaker_cmd: str | None = None
         self.objects: list = []
         self.traffic_signs: list = []
+        
+        # Collision detection state
+        self.collision_state = {
+            'front_threat': False,
+            'side_threat_left': False,
+            'side_threat_right': False,
+            'closest_front_dist': float('inf'),
+            'front_confidence': 0.0,
+            'vibrator_left': 0.0,
+            'vibrator_right': 0.0
+        }
 
     async def report(self):
         print("\n" + "="*60)
