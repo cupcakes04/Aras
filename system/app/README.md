@@ -57,5 +57,25 @@ This will:
 - Begin streaming tracking data.
 
 ### 4. Open Visualization
+**Option A: Local PC Viewing**
 Simply open `system/app/index.html` in any modern web browser (double-click or drag to browser). 
 Use the UI buttons on the bottom-left to toggle grid lines, object labels, and tracking trails.
+
+**Option B: Mobile Hotspot Viewing (Accessing from Phone)**
+If you are running the system on a device (e.g., Radxa/Raspberry Pi) connected to your phone's mobile hotspot, you can view the dashboard directly on your phone's browser!
+
+1. **Serve the HTML file**: In a new terminal window, navigate to the `system/app` directory and start a simple Python HTTP server:
+   ```bash
+   cd system/app
+   python -m http.server 8080
+   ```
+2. **Find the IP Address**: Find the IP address assigned to your bike's device by your phone's hotspot. You can usually find this in your phone's "Hotspot/Tethering" settings under connected devices, or by running `hostname -I` or `ip addr` on the device itself. (e.g., `192.168.43.55`).
+   ```bash
+   sudo ufw allow 8080/tcp  # For the HTML server
+   sudo ufw allow 8765/tcp  # For the WebSocket server
+   ```
+3. **Open on Phone**: Open Chrome/Safari on your phone and navigate to:
+   ```text
+   http://192.168.43.55:8080
+   ```
+   *Note: Because the WebSocket server binds to `0.0.0.0` and the HTML file dynamically checks `window.location.hostname`, the dashboard will automatically connect to the real-time data stream over the LAN.*

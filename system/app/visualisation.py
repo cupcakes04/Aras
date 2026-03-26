@@ -91,11 +91,11 @@ class Visualisation:
     
     async def start(self, period=0.1):
         """Start the WebSocket server and broadcasting."""
-        print(f"[Visualisation] Starting server on ws://localhost:{self.port}")
+        print(f"[Visualisation] Starting server on ws://0.0.0.0:{self.port}")
         print(f"[Visualisation] Open app/index.html in browser to view")
         
         # Start WebSocket server
-        self._server = await websockets.serve(self.handler, "localhost", self.port)
+        self._server = await websockets.serve(self.handler, "0.0.0.0", self.port)
         
         # Start broadcasting task
         await self.broadcast(period)
