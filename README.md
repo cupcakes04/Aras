@@ -144,3 +144,19 @@ $$\text{Intensity} = \min\left(1.0, \text{Confidence} \times \frac{TTC\_THRESHOL
 The physical brake actuator will only be triggered to fire if the motorcycle's current speed (measured via the onboard GPS) is within a safe operational envelope. For example:
 $$5.0 \text{ km/h} \leq \text{Ego Speed} \leq 50.0 \text{ km/h}$$
 This prevents the system from locking the brakes at dangerous highway speeds, or constantly triggering when rolling through a tight parking lot.
+
+---
+
+## 5. Configuration & Fine-Tuning
+The ARAS system relies on several global parameters that must be empirically fine-tuned during real-world testing and validation. These parameters are exposed as global constants at the top of their respective implementation files.
+
+**Tracker Parameters (`system/tracker.py`):**
+- `KALMAN_PROCESS_NOISE_Q` & `KALMAN_MEASURE_NOISE_R`: Tune these based on the physical vibration of the motorcycle and the inherent spatial noise of the sensors. Higher $R$ means trusting the sensor measurement less and relying more on the prediction model.
+- `TRACK_MAX_DISTANCE`: The maximum allowed spatial jump (in meters) between frames for a detection to match an existing track. Tune based on expected max target speeds and the system's operational frame rate.
+- `TRACK_CONFIRM_HITS` & `TRACK_DELETE_MISSES`: Adjust to balance track stability against ghost detections. Higher required hits reduce false positives but increase detection latency.
+
+**System & Fusion Parameters (`system/system.py`):**
+- `FUSION_MATCH_DIST`: The spatial threshold (in meters) to consider a camera bounding box and a radar point as the same physical object.
+- `RADAR_VELOCITY_ALPHA`: Controls how aggressively the Kalman filter's velocity is overwritten by the radar's Doppler speed.
+- `LANE_HALF_WIDTH`: The physical width of the threat corridor. Widen this for city driving, narrow it for lane-splitting scenarios.
+- `TTC_THRESHOLD`: The critical Time-To-Collision (in seconds) before triggering the haptic/audio actuators.

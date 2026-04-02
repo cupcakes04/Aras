@@ -3,6 +3,19 @@ import time
 from typing import List, Dict, Optional, Tuple
 from scipy.optimize import linear_sum_assignment
 
+# ==============================================================================
+# GLOBAL TUNING PARAMETERS
+# ==============================================================================
+KALMAN_DT = 0.05                 # Time step in seconds (e.g., 0.05 = 20Hz)
+KALMAN_PROCESS_NOISE_Q = 0.5     # Process noise magnitude (acceleration variance)
+KALMAN_MEASURE_NOISE_R = 0.3     # Measurement noise covariance in metres
+RADAR_VELOCITY_ALPHA = 0.3       # Alpha filter weight for blending radar speed (0.0 to 1.0)
+TRACK_CONFIRM_HITS = 3           # Number of consecutive hits to confirm a track
+TRACK_DELETE_MISSES = 5          # Number of consecutive misses to delete a track
+TRACK_CONFIDENCE_DECAY = 0.9     # Multiplier to decay confidence on a missed frame
+TRACK_MAX_DISTANCE = 2.0         # Maximum Euclidean distance (m) for Hungarian assignment
+# ==============================================================================
+
 
 class KalmanFilter:
     """
@@ -10,7 +23,7 @@ class KalmanFilter:
     State: [x, y, vx, vy]
     """
     
-    def __init__(self, dt: float = 0.05):
+    def __init__(self, dt: float = KALMAN_DT):
         """
         Parameters
         ----------
@@ -34,7 +47,7 @@ class KalmanFilter:
         ])
         
         # Process noise covariance
-        q = 0.5  # process noise magnitude
+        q = KALMAN_PROCESS_NOISE_Q  # process noise magnitude
         self.Q = q * np.array([
             [dt**4/4, 0, dt**3/2, 0],
             [0, dt**4/4, 0, dt**3/2],
@@ -43,7 +56,7 @@ class KalmanFilter:
         ])
         
         # Measurement noise covariance
-        r = 0.3  # measurement noise (metres)
+        r = KALMAN_MEASURE_NOISE_R  # measurement noise (metres)
         self.R = r * np.eye(2)
         
         # State estimate and covariance
@@ -83,7 +96,7 @@ class Track:
     
     _next_id = 0
     
-    def __init__(self, detection: Dict, dt: float = 0.05):
+    def __init__(self, detection: Dict, dt: float = KALMAN_DT):
         """
         Parameters
         ----------
@@ -165,7 +178,7 @@ class Track:
         # Nudge Kalman vy toward radar-derived velocity when radar data is present
         vy_radar = self._radar_vy(detection['world_y'], self.radar_speed, self.radar_direction)
         if vy_radar != 0.0:
-            alpha = 0.3  # blend weight: 30% radar hint, 70% filter estimate
+            alpha = RADAR_VELOCITY_ALPHA  # blend weight: 30% radar hint, 70% filter estimate
             self.kf.x[3] = (1 - alpha) * self.kf.x[3] + alpha * vy_radar
         
         # Update lifecycle
@@ -174,16 +187,16 @@ class Track:
         self.last_update = time.time()
         
         # Promote to confirmed if enough hits
-        if self.state == 'tentative' and self.hits >= 3:
+        if self.state == 'tentative' and self.hits >= TRACK_CONFIRM_HITS:
             self.state = 'confirmed'
             
     def mark_missed(self):
         """Mark track as missed this frame."""
         self.misses += 1
-        self.confidence *= 0.9  # decay confidence
+        self.confidence *= TRACK_CONFIDENCE_DECAY  # decay confidence
         
         # Mark for deletion if too many misses
-        if self.misses > 5:
+        if self.misses > TRACK_DELETE_MISSES:
             self.state = 'deleted'
             
     def get_position(self) -> Tuple[float, float]:
@@ -222,7 +235,7 @@ class TrackManager:
     Multi-object tracker with Hungarian algorithm for detection-to-track association.
     """
     
-    def __init__(self, dt: float = 0.05, max_distance: float = 2.0):
+    def __init__(self, dt: float = KALMAN_DT, max_distance: float = TRACK_MAX_DISTANCE):
         """
         Parameters
         ----------

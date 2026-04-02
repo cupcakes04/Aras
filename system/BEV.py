@@ -5,6 +5,17 @@ import cv2
 from typing import Literal
 from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker
 
+# ==============================================================================
+# GLOBAL TUNING PARAMETERS
+# ==============================================================================
+EPSILON = 1e-9                     # Small value to prevent division by zero
+CALIB_BOARD_SIZE = (9, 6)          # Default checkerboard inner corners (cols, rows)
+CALIB_SQUARE_SIZE_M = 0.025        # Default physical size of checkerboard square in metres
+CALIB_CRITERIA_MAX_ITER = 30       # Max iterations for subpixel corner refinement
+CALIB_CRITERIA_EPS = 0.001         # Epsilon for subpixel corner refinement
+CALIB_SEARCH_WINDOW = (11, 11)     # Window size for subpixel corner refinement
+# ==============================================================================
+
 class BEV:
     """
     Bird's-Eye-View fusion layer.
@@ -130,11 +141,11 @@ class BEV:
         Returns corrected (x, y) in metres.
         """
         R = self._tilt_rotation_matrix(roll_deg, pitch_deg)
-        dist = math.hypot(x_m, y_m) or 1e-9
+        dist = math.hypot(x_m, y_m) or EPSILON
         beam = np.array([x_m / dist, y_m / dist, 0.0])
         beam_world = R @ beam
         bx, by = beam_world[0], beam_world[1]
-        scale = dist / (math.hypot(bx, by) or 1e-9)
+        scale = dist / (math.hypot(bx, by) or EPSILON)
         return bx * scale, by * scale
 
     # ------------------------------------------------------------------
@@ -252,8 +263,8 @@ class BEV:
 
 
 @staticmethod
-def calibrate_camera(image_paths: list, board_size: tuple = (9, 6),
-                     square_size_m: float = 0.025,
+def calibrate_camera(image_paths: list, board_size: tuple = CALIB_BOARD_SIZE,
+                     square_size_m: float = CALIB_SQUARE_SIZE_M,
                      show_corners: bool = False):
     """
     Compute the camera intrinsic matrix from checkerboard images.
@@ -304,8 +315,8 @@ def calibrate_camera(image_paths: list, board_size: tuple = (9, 6),
         if not found:
             continue
 
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-        corners = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, CALIB_CRITERIA_MAX_ITER, CALIB_CRITERIA_EPS)
+        corners = cv2.cornerSubPix(gray, corners, CALIB_SEARCH_WINDOW, (-1, -1), criteria)
 
         obj_points.append(objp)
         img_points.append(corners)

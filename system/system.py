@@ -6,6 +6,23 @@ from app.visualisation import Visualisation
 import yaml
 import os
 
+# ==============================================================================
+# GLOBAL TUNING PARAMETERS
+# ==============================================================================
+# Fusion
+FUSION_MATCH_DIST = 1.0          # Max distance (m) to fuse camera & radar detections
+CAM_ONLY_CONFIDENCE = 0.4        # Base confidence for camera-only detections
+RADAR_CONFIDENCE_BOOST = 1.2     # Multiplier to boost radar confidence if camera matches
+SIGN_CONFIDENCE = 0.7            # Fixed confidence for traffic signs
+MIN_CONFIDENCE_TRACK = 0.3       # Minimum confidence to process an object in collision logic
+
+# Collision Detection (TTC & Corridors)
+LANE_HALF_WIDTH = 1.0            # Width (m) either side of the bike to check for collisions
+TTC_THRESHOLD = 2.0              # Seconds to collision before triggering alert
+MIN_BRAKE_SPEED_KMH = 5.0        # Min ego speed (km/h) to allow auto-braking
+MAX_BRAKE_SPEED_KMH = 50.0       # Max ego speed (km/h) to allow auto-braking
+# ==============================================================================
+
 # https://github.com/cupcakes04/Aras
 
 
@@ -32,13 +49,15 @@ class System:
         # # Sensors
         # self.camera = Camera(max_history=10, config=self.config)
         # self.imu = IMU(max_history=10)
-        # self.radar_front = Radar(port="/dev/ttyS3", baudrate=115200, max_history=10)
-        # self.radar_back = Radar(port="/dev/ttyS5", baudrate=115200, max_history=10)
-        # self.gps = GPS(port="/dev/ttyS4", baudrate=9600, max_history=10)
-        # self.actuator = Actuator(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
-        # self.vibrator_left = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=10, max_history=10)
-        # self.vibrator_right = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=11, max_history=10)
-        # self.speaker = Speaker(max_history=10)
+        # self.radar_front = HardwareRadar(port="/dev/ttyS3", baudrate=115200, max_history=10)
+        # self.radar_back = HardwareRadar(port="/dev/ttyS5", baudrate=115200, max_history=10)
+        # self.gps = HardwareGPS(port="/dev/ttyS4", baudrate=9600, max_history=10)
+
+        # # Hardware Actuators (with fallback built-in inside the modules)
+        # self.actuator = LinearActuator(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
+        # self.vibrator_left = HapticVibrator(gpio_chip='/dev/gpiochip0', gpio_line=10, max_history=10)
+        # self.vibrator_right = HapticVibrator(gpio_chip='/dev/gpiochip0', gpio_line=11, max_history=10)
+        # self.speaker = HardwareSpeaker(max_history=10)
 
         # Configure radar and cam to Bird's eye view (top down)
 
@@ -154,7 +173,7 @@ class System:
 
             best_match = None
             best_match_idx = None
-            best_dist = 1.0  # matching threshold in metres
+            best_dist = FUSION_MATCH_DIST  # matching threshold in metres
 
             for idx, cam in enumerate(camera_objs):
                 if idx in matched_cam_indices:
@@ -167,7 +186,7 @@ class System:
                     best_match_idx = idx
 
             # Boost confidence if matched with camera
-            confidence = min(1.0, snr * 1.2) if best_match else snr
+            confidence = min(1.0, snr * RADAR_CONFIDENCE_BOOST) if best_match else snr
 
             obj = {
                 'id': obj_id,
@@ -195,7 +214,7 @@ class System:
                 'name': cam.get('name', 'unknown'),
                 'world_x': cam['world_x'],
                 'world_y': cam['world_y'],
-                'confidence': 0.4,  # Lower confidence without radar confirmation
+                'confidence': CAM_ONLY_CONFIDENCE,  # Lower confidence without radar confirmation
                 'cam_only': True,
                 'radar_speed': None,
                 'radar_direction': None,
@@ -214,7 +233,7 @@ class System:
                 'name': sign.get('name', 'unknown_sign'),
                 'world_x': sign['world_x'],
                 'world_y': sign['world_y'],
-                'confidence': 0.7,  # Fixed confidence for signs
+                'confidence': SIGN_CONFIDENCE,  # Fixed confidence for signs
             }
             signs.append(sign_obj)
             sign_id += 1
@@ -238,10 +257,6 @@ class System:
           'back_collision'  : bool
         These are forwarded to the visualisation WebSocket payload.
         """
-        LANE_HALF_WIDTH = 1.0   # metres either side of centre line
-        TTC_THRESHOLD   = 2.0   # seconds — alert if time-to-collision is below this
-        MAX_BRAKE_SPEED_KMH = 50.0  # Do not auto-brake if ego speed > 50 km/h
-        MIN_BRAKE_SPEED_KMH = 5.0   # Do not auto-brake if ego speed < 5 km/h
 
         # Get ego speed from GPS history (default to 0 if unavailable)
         ego_speed_kmh = 0.0
@@ -266,7 +281,7 @@ class System:
             obj['front_collision'] = False
             obj['back_collision']  = False
 
-            if conf < 0.3:
+            if conf < MIN_CONFIDENCE_TRACK:
                 continue
 
             # Only objects within the lane corridor (parallel lines, not a cone)
