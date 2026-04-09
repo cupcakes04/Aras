@@ -4,8 +4,17 @@ Chapter 2: Proposed Design
 The proposed Advanced Rider Assistance System is designed to enhance rider safety through comprehensive situational awareness and proactive threat detection. The architecture follows a modular, sense-plan-act paradigm. The sensing layer comprises a monocular camera and a millimeter-wave radar. The perception and planning layer executes coordinate transformation, sensor fusion, multi-object tracking, and collision threat assessment. The action layer consists of haptic and audio actuators for rider alerts and a remote graphical interface for real-time visualization.
 [Insert Image Here: Block diagram illustrating the system architecture, showing data flow from Camera and Radar to the fusion module, tracker, and finally to the visualization and haptic outputs]
 
-2.2 Sensor Modalities and Justification
-The system employs a complementary sensor suite to overcome the limitations of individual modalities. The monocular camera provides high-resolution semantic information, enabling the classification of dynamic obstacles such as cars, trucks, and pedestrians, as well as static infrastructure like traffic signs. However, monocular vision struggles with accurate depth estimation. To address this, an mmWave radar is integrated. Radar excels at direct distance and relative velocity measurement, remaining robust under adverse weather and lighting conditions. 
+2.2 Sensor Modalities and AI Vision Pipeline
+The system employs a complementary sensor suite to overcome the limitations of individual modalities. The monocular camera provides high-resolution semantic information, enabling the classification of dynamic obstacles such as cars, trucks, and pedestrians, as well as static infrastructure like traffic signs. 
+
+To extract this semantic information in real-time, the architecture utilizes a deep learning vision model based on the You Only Look Once (YOLO) framework, specifically YOLOv5. Unlike traditional two-stage object detectors that first propose regions and then classify them, YOLO frames object detection as a single regression problem. The image is passed through a Convolutional Neural Network (CNN) once, which simultaneously predicts bounding box coordinates and class probabilities across the entire image.
+
+The YOLOv5 architecture consists of three main components:
+1. **Backbone (CSPDarknet):** This is the feature extractor network. It processes the raw input image through multiple convolutional layers to extract hierarchical features (edges, shapes, textures) at different spatial resolutions. The Cross Stage Partial (CSP) network structure is used to reduce computation while maintaining high accuracy.
+2. **Neck (PANet):** The neck aggregates the features extracted by the backbone. It uses a Path Aggregation Network (PANet) to combine low-level, high-resolution features (good for locating small objects) with high-level, low-resolution semantic features (good for classifying large objects). This multi-scale feature fusion is critical for detecting vehicles and pedestrians at varying distances.
+3. **Head:** The head performs the final dense predictions. It outputs a 3D tensor containing the bounding box coordinates ($x, y, w, h$), the objectness score (the confidence that an object exists in that box), and the class probabilities (e.g., Car, Pedestrian, Traffic Sign).
+
+However, monocular vision struggles with accurate depth estimation. To address this, an mmWave radar is integrated. Radar excels at direct distance and relative velocity measurement, remaining robust under adverse weather and lighting conditions. 
 
 2.3 Coordinate Transformation and Inverse Perspective Mapping (IPM)
 A fundamental challenge in sensor fusion is aligning data from disparate sensors which "see" the world differently into a common reference frame. The camera inherently captures a two-dimensional perspective projection of the three-dimensional world, meaning objects appear smaller as they get further away, and distances are difficult to gauge directly from pixels. The radar, conversely, provides direct metric distances.
@@ -116,7 +125,56 @@ Chapter 3: Implementation, Testing and Validation
 3.1 Software Implementation and Concurrency
 The system is implemented using an asynchronous programming model to handle the disparate update rates of the sensors. The camera and radar data acquisition routines operate concurrently, feeding a central processing loop. This asynchronous design prevents slower sensors or computationally heavy vision models from blocking the processing of high-frequency data, ensuring low-latency threat detection.
 
-3.2 Camera Calibration and Inverse Perspective Mapping
+3.2 AI Vision Model Training and NPU Deployment
+The theoretical AI vision pipeline required a practical implementation tailored for edge computing. We selected the `yolov5s` (small) variant of the YOLOv5 architecture as the base model, providing an optimal balance between inference speed and detection accuracy suitable for real-time applications.
+
+**1. Model Training and Fine-Tuning:**
+The training process utilized a transfer learning approach. Rather than training a model from scratch—which requires massive computational resources and millions of images—we initialized the network with pre-trained weights from the expansive COCO dataset. This provided the model with a fundamental understanding of basic shapes, textures, and common objects (like cars and pedestrians).
+
+We then fine-tuned this pre-trained model on a custom, domain-specific dataset combining both vehicle classes and static infrastructure (e.g., `traffic_sign.yaml`). It was imperative to treat dynamic obstacles (cars, trucks, pedestrians) and static hazards (Malaysian traffic signs, stop lights) with equal importance during training to ensure comprehensive situational awareness. The fine-tuning was executed over 100 epochs using a batch size of 64 on an NVIDIA GPU. During this phase, the learning rate was dynamically adjusted to allow the model's weights to adapt to the new classes without catastrophically forgetting its base knowledge.
+
+**2. Class Truncation and Softmax Filtering:**
+A critical challenge encountered during initial testing was that exposing the model to an excessively high number of training classes significantly reduced its overall reliability and inference speed. The base COCO dataset contains 80 distinct classes, many of which (e.g., "giraffe", "toaster") are entirely irrelevant to a motorcycle assistance system and consume valuable computational cycles.
+
+To improve practical performance and reliability, the model's output head was truncated to a shortlisted subset of highly relevant classes. For an object detection model, the final probability for any given class is computed using the Softmax function. To understand why truncation helps, we can break this function into three simple steps:
+
+1. **Calculate the unnormalized exponential score** for a specific target class $i$ using its raw neural network output (logit) $z_i$:
+   $$E_i = e^{z_i}$$
+
+2. **Calculate the total sum of exponential scores** across all $K$ possible classes the model is allowed to predict:
+   $$E_{total} = \sum_{j=1}^{K} e^{z_j}$$
+
+3. **Compute the final confidence probability** $P_i$ for the target class as a ratio of its score against the total:
+   $$P_i = \frac{E_i}{E_{total}}$$
+
+By mathematically restricting the total number of classes ($K$) to only our shortlisted subset, we drastically reduce the denominator ($E_{total}$). The model no longer distributes probability mass to irrelevant objects, which naturally boosts the final confidence scores ($P_i$) for legitimate threats. The final truncated configuration (as implemented in `config.yaml`) was restricted to:
+*   **Dynamic Objects:** `person` (0), `bicycle` (1), `car` (2), `motorcycle` (3), `bus` (4), `truck` (5)
+*   **Static Signs:** `traffic light` (0), `stop sign` (1)
+
+This targeted truncation dramatically improved the system's reliability, ensuring that the NPU focused entirely on objects that pose a genuine collision threat.
+
+[Insert Image Here: `system/yolo/yolov5/runs/train/traffic_sign/results.png` - Training Loss and Mean Average Precision (mAP) graphs showing model convergence over 100 epochs]
+
+To evaluate the success of the fine-tuning process, we analyzed the generated confusion matrix and precision-recall curves. 
+
+[Insert Image Here: `system/yolo/yolov5/runs/train/traffic_sign/confusion_matrix.png` - Confusion matrix showing classification accuracy across different object classes]
+
+[Insert Image Here: `system/yolo/yolov5/runs/train/traffic_sign/PR_curve.png` - Precision-Recall curve demonstrating the trade-off between false positives and false negatives]
+
+Furthermore, to visually verify that the model was localizing and classifying targets correctly on real data, we examined the validation batch prediction mosaics.
+
+[Insert Image Here: `system/yolo/yolov5/runs/train/traffic_sign/val_batch0_pred.jpg` - Mosaic of validation images showing the final predicted bounding boxes and class labels]
+
+**3. ONNX Extraction and NPU Quantization:**
+While the trained PyTorch model (`.pt`) executes efficiently on desktop GPUs, it is entirely unsuitable for the resource-constrained environment of the Radxa Zero 3W's Rockchip NPU (Neural Processing Unit). Deploying the model to the edge required a complex conversion and quantization pipeline.
+
+First, the PyTorch model was exported to the Open Neural Network Exchange (ONNX) format. This intermediate representation strips away Python-specific dependencies, creating an execution graph composed of standardized mathematical operations.
+
+Next, we utilized the Rockchip RKNN Toolkit to convert the ONNX graph into a `.nb` (Network Binary) format natively executable by the Radxa NPU. Crucially, this step involved **Post-Training Quantization (PTQ)**. The original model's weights and activations, stored as high-precision 32-bit floating-point numbers (FP32), were quantized down to 8-bit integers (INT8). 
+
+This INT8 quantization drastically reduced the model's memory footprint by 75% and allowed the NPU's specialized integer math units to process inferences at significantly higher frame rates with lower power consumption. A calibration dataset (a small subset of the training images) was passed through the network during quantization to calculate the optimal scaling factors, ensuring that the drop from 32-bit to 8-bit precision did not result in a devastating loss of detection accuracy.
+
+3.3 Camera Calibration and Inverse Perspective Mapping
 The transition from theory to practice required rigorous camera calibration. In the implemented Python codebase (specifically within the `BEV.py` module), this was executed in two distinct phases: intrinsic calibration and extrinsic ground-plane projection.
 
 **1. Intrinsic Calibration (Lens Distortion & Camera Matrix):**
@@ -143,7 +201,7 @@ $$P_{image} = \begin{bmatrix} u_1 & v_1 \\ u_2 & v_2 \\ u_3 & v_3 \\ u_4 & v_4 \
 
 By passing both $P_{world}$ and $P_{image}$ into OpenCV's `findHomography` function, the system solves the linear system to generate the $3 \times 3$ transformation matrix used during runtime to convert the bottom-center of bounding boxes into metric $(x, y)$ coordinates.
 
-3.3 Multi-Object Tracking and Kalman Filter Realization
+3.4 Multi-Object Tracking and Kalman Filter Realization
 The Multi-Object Tracking pipeline was realized in `tracker.py` by instantiating individual `Track` objects that encapsulate their respective Kalman filters. 
 
 While the theoretical Kalman Filter involves dynamically updating covariance based on complex system modeling, the actual software implementation simplifies this for real-time performance on constrained hardware. We implemented a linear Constant Velocity model using NumPy matrices operating at a fixed time step defined by `KALMAN_DT = 0.05` seconds, representing a $20$ Hz update loop.
@@ -163,7 +221,7 @@ $$R = \begin{bmatrix} \sigma_{x}^2 & 0 \\ 0 & \sigma_{y}^2 \end{bmatrix}$$
 
 The data association logic (Hungarian algorithm) was implemented using SciPy's `linear_sum_assignment` function applied to a cost matrix populated by the Euclidean distances between predicted track states and new detections. A crucial gating threshold was added: any mathematically optimal match that exceeded a physical distance defined by `TRACK_MAX_DISTANCE` was aggressively rejected. This prevents tracks from erratically jumping across the screen when a detection is temporarily dropped and a new, unrelated object appears elsewhere. Furthermore, tracks require `TRACK_CONFIRM_HITS` consecutive hits to be upgraded from "tentative" to "confirmed", and are deleted if missed for `TRACK_DELETE_MISSES` consecutive frames, ensuring robustness against flickering detections.
 
-3.4 Sensor Fusion and Threat Assessment Logic
+3.5 Sensor Fusion and Threat Assessment Logic
 The sensor fusion logic implemented in `system.py` executes sequentially at every frame. First, camera detections are projected to the BEV plane. Then, radar targets (which natively arrive in polar coordinates of angle and distance) are converted to Cartesian $(x, y)$ coordinates.
 
 The system utilizes a spatial-proximity matching loop. If a camera bounding box center falls within `FUSION_MATCH_DIST` meters of a radar target, they are considered "fused". Fused objects immediately inherit the highly accurate Doppler speed directly from the radar, and their tracking confidence is multiplied by `RADAR_CONFIDENCE_BOOST`. If no radar match is found, the object is marked as "camera-only" and assigned a lower base confidence score defined by `CAM_ONLY_CONFIDENCE`.
@@ -174,7 +232,7 @@ This ensures the tracked velocity remains highly accurate even if the bounding b
 
 The collision detection utilizes the Time-To-Collision (TTC) metric as defined in Chapter 2. The collision loops evaluate every confirmed track within the immediate front corridor defined by `LANE_HALF_WIDTH` that has a negative relative velocity (approaching the ego-vehicle). If the TTC drops below the `TTC_THRESHOLD` second threshold, the warning flags are raised, and the haptic intensity is calculated dynamically before being dispatched to the actuator controller over the local network.
 
-3.5 Visualization Interface Development and User Interaction
+3.6 Visualization Interface Development and User Interaction
 To facilitate testing and demonstrate system capabilities, a real-time three-dimensional visualization interface was developed. Built using web technologies (HTML, CSS, JavaScript) and the Three.js library, the interface connects to the core Python system via a WebSocket server operating on a local network port. This architecture allows for the decoupled rendering of the vehicle's environment on any device equipped with a modern web browser.
 [Insert Image Here: Screenshot of the 3D web visualization interface, showing tracked vehicles as 3D bounding boxes, traffic signs, and the collision warning UI overlay]
 
@@ -192,7 +250,7 @@ The visualization interface provides the user with a comprehensive, interactive 
 
 6. Interacting with Collision Warnings: The interface is designed to alert the user immediately of impending threats. When an object enters the critical frontal threat zone, a large, flashing red "COLLISION WARNING" banner appears in the center of the user's screen, representing the distinct audio warning tone triggered by the physical system. A contextual information box beneath it tells the user the exact distance to the obstacle. Furthermore, three circular indicators at the bottom of the screen (labeled LEFT, FRONT, RIGHT) simulate the physical haptic feedback. If a threat is detected on a specific side, the corresponding indicator flashes red and vibrates on screen, allowing the user to visually verify the haptic actuator commands.
 
-3.6 Validation Methodology and Parameter Tuning
+3.7 Validation Methodology and Parameter Tuning
 Validation of the prototype focused on functional correctness, algorithm stability, and the empirical fine-tuning of system parameters. The testing environment initially utilized simulated data streams to mimic complex traffic scenarios, allowing for repeatable evaluation of the tracking and fusion logic without the immediate risks of on-road testing. This was followed by controlled real-world validation.
 
 A critical phase of the validation methodology involved tuning the global parameters defined in the system architecture to achieve optimal performance:
@@ -206,7 +264,7 @@ A. Coordinate Projection Accuracy: Verifying that camera detections at known pix
 B. Tracking Stability: Observing the frequency of ID switches and track fragmentation when objects crossed paths or were temporarily lost by the simulated sensors.
 C. Warning Latency: Ensuring that the collision detection logic triggered the appropriate haptic commands, audio alerts, and UI warnings immediately upon an object entering a defined threat zone.
 
-3.7 Validation Results, Parameter Finalization, and Analysis
+3.8 Validation Results, Parameter Finalization, and Analysis
 Through iterative testing, the global system parameters were finalized to the following values, which provided the most stable performance for the prototype:
 
 **Final Track Management Parameters:**
@@ -223,6 +281,11 @@ Through iterative testing, the global system parameters were finalized to the fo
 *   `TTC_THRESHOLD = 2.0` seconds: Provided adequate time for human reaction and mechanical braking.
 
 With these parameters locked, the tracking system effectively smoothed noisy trajectory data and maintained object identities through brief periods of simulated occlusion. The two-level fusion strategy proved valuable; the system reliably prioritized radar-confirmed targets (boosting confidence by `RADAR_CONFIDENCE_BOOST = 1.2`) for imminent collision warnings while maintaining a broader awareness of the environment through camera-only tracks (base confidence `CAM_ONLY_CONFIDENCE = 0.4`). The asynchronous architecture successfully maintained a high update rate for the visualization and warning logic, decoupled from the simulated sensor read times.
+
+**A Critical Note on AI Reliability and Datasets:**
+It is imperative to emphasize a fundamental limitation regarding the AI vision model's performance. While the YOLOv5 model demonstrates high precision and rapid inference in controlled, ideal testing states, its real-world performance will inevitably degrade without localized data. In such computer vision projects, the primary resource bottleneck is not the neural network architecture, but the dataset itself. 
+
+No matter how sophisticated the control loop, spatial fusion logic, or tracking algorithms are, if the model encounters a vehicle type, lighting condition, or regional traffic sign that was absent from its training distribution, it will fail to detect it. Therefore, a model trained on generic European or American datasets will perform sub-optimally on Malaysian roads. For this prototype to transition from a controlled proof-of-concept to a commercially viable safety product, a massive, highly localized, and comprehensively annotated dataset specific to the target deployment region must be curated.
 
 
 Chapter 4: Reflection on Prototype
