@@ -35,8 +35,9 @@ class RadarOld(History):
     async def read(self):
         # 1. Read the sensor values (placeholder)
         value = [
-            {'angle': 30,  'distance': 10, 'direction': True,  'speed': 2, 'snr': 0.6},
-            {'angle': -15, 'distance': 5,  'direction': False, 'speed': 1, 'snr': 0.9},
+            {'angle': 0, 'distance': 12.0, 'direction': True, 'speed': 15.0, 'snr': 0.85},
+            {'angle': -15, 'distance': 8.0, 'direction': True, 'speed': 5.0, 'snr': 0.7},
+            {'angle': 20, 'distance': 15.0, 'direction': False, 'speed': 20.0, 'snr': 0.6}
         ]
 
         # 2. Record the action in history
@@ -181,9 +182,11 @@ class Radar(History):
         and saves the targets from the *latest* valid frame to history.
         """
         if not self._hardware_available:
-            # Provide dummy target if hardware missing
+            # Provide dummy targets if hardware missing
             value = [
-                {'angle': 0, 'distance': 10, 'direction': True, 'speed': 5, 'snr': 0.5}
+                {'angle': 0, 'distance': 12.0, 'direction': True, 'speed': 15.0, 'snr': 0.85},
+                {'angle': -15, 'distance': 8.0, 'direction': True, 'speed': 5.0, 'snr': 0.7},
+                {'angle': 20, 'distance': 15.0, 'direction': False, 'speed': 20.0, 'snr': 0.6}
             ]
             self.save_history(value)
             return

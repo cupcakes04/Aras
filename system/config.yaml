@@ -32,11 +32,23 @@ sign_dimensions:
   unknown_sign: { w: 0.6, h: 2.0, d: 0.05, color: 0x888888 }
 
 bev:
-  image_pts: [[10, 20], [60, 20], [60, 40], [10, 40]]  # bbox corners
-  world_pts: [[0, 2], [0.5, 2], [0.5, 1.5], [0, 1.5]]  # real positions in metres
-  camera_matrix: [[1, 0, 1], [0, 1, 1], [0, 0, 1]] 
-  # fx, 0, cx (optical center x) 
-  # 0, fy, cy (optical center y)
+  # Trapezoid on the image corresponding to a rectangle on the ground in front of the camera
+  # Top-left, Top-right, Bottom-right, Bottom-left
+  image_pts: [[220, 360], [420, 360], [540, 640], [100, 640]]
+  
+  # Corresponding real-world coordinates (x, y) in metres relative to the bike (origin)
+  # Bike is at (0,0), +y is forward, +x is right
+  # Top-left (-2m right, 10m forward), Top-right (+2m right, 10m forward)
+  # Bottom-right (+2m right, 2m forward), Bottom-left (-2m right, 2m forward)
+  world_pts: [[-2.0, 10.0], [2.0, 10.0], [2.0, 2.0], [-2.0, 2.0]]
+  
+  # Realistic camera intrinsic matrix for a 640x640 image
+  # fx=600, fy=600, cx=320, cy=320
+  camera_matrix: [
+    [600.0, 0.0, 320.0], 
+    [0.0, 600.0, 320.0], 
+    [0.0, 0.0, 1.0]
+  ]
 
 default_class_dimension:
   w: 1.0

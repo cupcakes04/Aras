@@ -3,7 +3,6 @@ import random
 import time
 from collections import deque
 from .history import History
-from periphery import GPIO
 
 class VibratorOld(History):
     """Vibrator, functions in 0.0~1.0 signal strength, normalised (Legacy Dummy)"""
@@ -36,6 +35,7 @@ class Vibrator(History):
         self.setup(gpio_chip, gpio_line)
         
     def setup(self, gpio_chip: str, gpio_line: int):
+        from periphery import GPIO
         try:
             self._gpio = GPIO(gpio_chip, gpio_line, "out")
             self._gpio.write(False)     # ensure vibrator is off on startup

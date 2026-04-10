@@ -63,5 +63,5 @@ def test_digital():
 
 if __name__ == "__main__":
     # Choose which test to run
-    # test_pwm()
-    test_digital()
+    test_pwm()
+    # test_digital()

@@ -35,13 +35,18 @@ class CameraOld(History):
     async def read(self):
         value = {
             'objs': [
-                {'class': 0, 'bbox': [20, 10, 60, 10], 'name': 'person'},
-                {'class': 2, 'bbox': [100, 200, 400, 300], 'name': 'car'},
-                {'class': 5, 'bbox': [60, 300, 90, 400], 'name': 'truck'},
+                # Person slightly to the left, medium distance (bottom edge ~450)
+                {'class': 0, 'bbox': [150, 200, 250, 450], 'name': 'person'},
+                # Car straight ahead, further away (bottom edge ~380)
+                {'class': 2, 'bbox': [280, 250, 360, 380], 'name': 'car'},
+                # Truck to the right, closer (bottom edge ~550)
+                {'class': 5, 'bbox': [400, 150, 600, 550], 'name': 'truck'},
             ],
             'signs': [
-                {'class': 0, 'bbox': [10, 20, 40, 30], 'name': 'traffic light'},
-                {'class': 1, 'bbox': [60, 30, 90, 40], 'name': 'stop sign'},
+                # Traffic light high up, further away (bottom edge ~250)
+                {'class': 0, 'bbox': [300, 50, 340, 250], 'name': 'traffic light'},
+                # Stop sign on the right side, medium distance (bottom edge ~420)
+                {'class': 1, 'bbox': [500, 200, 550, 420], 'name': 'stop sign'},
             ],
             }
         self.save_history(value)

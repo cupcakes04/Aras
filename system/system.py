@@ -1,5 +1,6 @@
 import asyncio
-from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS, CameraOld, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
+# from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
+from modules import CameraOld, IMU, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
 from BEV import BEV
 from tracker import TrackManager
 from app.visualisation import Visualisation
@@ -44,7 +45,7 @@ class System:
         self.actuator = ActuatorOld(max_history=10)
         self.vibrator_left = VibratorOld(max_history=10)
         self.vibrator_right = VibratorOld(max_history=10)
-        self.speaker = Speaker(max_history=10)
+        self.speaker = SpeakerOld(max_history=10)
 
         # # Sensors
         # self.camera = Camera(max_history=10, config=self.config)

@@ -31,9 +31,9 @@ class GPSOld(History):
         
     async def read(self):
         value = {
-            "latitude": 3.1390,
-            "longitude": 101.6869,
-            "speed_kmh": 44.6
+            "latitude": 3.1390 + random.uniform(-0.0001, 0.0001),
+            "longitude": 101.6869 + random.uniform(-0.0001, 0.0001),
+            "speed_kmh": 44.6 + random.uniform(-1.0, 1.0)
         }
         self.save_history(value)
 

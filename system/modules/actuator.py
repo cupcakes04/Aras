@@ -3,7 +3,6 @@ import random
 import time
 from collections import deque
 from .history import History
-from periphery import PWM
 
 class ActuatorOld(History):
     """Linear actuator, functions in extend as True/False only (Legacy Dummy)"""
@@ -47,6 +46,7 @@ class Actuator(History):
         
     def setup(self, rpwm_chip: int, rpwm_channel: int, lpwm_chip: int, lpwm_channel: int):
         try:
+            from periphery import PWM
             # Initialise RPWM (extend)
             self._rpwm = PWM(rpwm_chip, rpwm_channel)
             self._rpwm.frequency  = _PWM_FREQUENCY
