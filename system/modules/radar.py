@@ -77,7 +77,7 @@ class Radar(History):
     Integrated into system.py History structure.
     """
 
-    def __init__(self, port: str = "/dev/ttyS3", baudrate: int = 115200, **kwargs):
+    def __init__(self, port: str = "/dev/ttyAS3", baudrate: int = 115200, **kwargs):
         super().__init__(**kwargs)
         self.setup(port, baudrate)
 
@@ -102,7 +102,7 @@ class Radar(History):
             
         while True:
             # Read whatever is available
-            chunk = self._serial.read(256, timeout=0.0)
+            chunk = self._serial.read(256, timeout=0.01)
             if chunk:
                 self._buffer.extend(chunk)
             else:

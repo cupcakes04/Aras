@@ -30,25 +30,40 @@ class CameraOld(History):
         self.setup(**kwargs)
         
     def setup(self, **kwargs):
-        pass
+        self.frames = []
+        self.frame_idx = 0
+        try:
+            # Try loading the demo json file
+            demo_path = os.path.join(os.path.dirname(__file__), '../../assets/demo/result.json')
+            with open(demo_path, 'r') as f:
+                self.frames = json.load(f)
+            print(f"[CameraOld] Loaded {len(self.frames)} frames from demo JSON.")
+        except Exception as e:
+            print(f"[CameraOld] Could not load demo JSON: {e}. Falling back to hardcoded dummy data.")
+            self.frames = [{
+                'objs': [
+                # Person slightly to the left, medium distance (bottom edge ~450)
+                    {'class': 0, 'bbox': [150, 200, 250, 450], 'name': 'person'},
+                # Car straight ahead, further away (bottom edge ~380)
+                    {'class': 2, 'bbox': [280, 250, 360, 380], 'name': 'car'},
+                # Truck to the right, closer (bottom edge ~550)
+                    {'class': 5, 'bbox': [400, 150, 600, 550], 'name': 'truck'},
+                ],
+                'signs': [
+                # Traffic light high up, further away (bottom edge ~250)
+                    {'class': 0, 'bbox': [300, 50, 340, 250], 'name': 'traffic light'},
+                # Stop sign on the right side, medium distance (bottom edge ~420)
+                    {'class': 1, 'bbox': [500, 200, 550, 420], 'name': 'stop sign'},
+                ],
+            }]
         
     async def read(self):
-        value = {
-            'objs': [
-                # Person slightly to the left, medium distance (bottom edge ~450)
-                {'class': 0, 'bbox': [150, 200, 250, 450], 'name': 'person'},
-                # Car straight ahead, further away (bottom edge ~380)
-                {'class': 2, 'bbox': [280, 250, 360, 380], 'name': 'car'},
-                # Truck to the right, closer (bottom edge ~550)
-                {'class': 5, 'bbox': [400, 150, 600, 550], 'name': 'truck'},
-            ],
-            'signs': [
-                # Traffic light high up, further away (bottom edge ~250)
-                {'class': 0, 'bbox': [300, 50, 340, 250], 'name': 'traffic light'},
-                # Stop sign on the right side, medium distance (bottom edge ~420)
-                {'class': 1, 'bbox': [500, 200, 550, 420], 'name': 'stop sign'},
-            ],
-            }
+        if not self.frames:
+            return
+            
+        value = self.frames[self.frame_idx]
+        self.frame_idx = (self.frame_idx + 1) % len(self.frames)
+
         self.save_history(value)
 
 

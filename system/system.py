@@ -1,6 +1,6 @@
 import asyncio
 # from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
-from modules import CameraOld, IMU, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
+from modules import WARN_EMERGENCY_BRAKING, WARN_FCW, WARN_RCW, CameraOld, IMU, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
 from BEV import BEV
 from tracker import TrackManager
 from app.visualisation import Visualisation
@@ -50,15 +50,15 @@ class System:
         # # Sensors
         # self.camera = Camera(max_history=10, config=self.config)
         # self.imu = IMU(max_history=10)
-        # self.radar_front = HardwareRadar(port="/dev/ttyS3", baudrate=115200, max_history=10)
-        # self.radar_back = HardwareRadar(port="/dev/ttyS5", baudrate=115200, max_history=10)
-        # self.gps = HardwareGPS(port="/dev/ttyS4", baudrate=9600, max_history=10)
+        # self.radar_front = Radar(port="/dev/ttyAS3", baudrate=115200, max_history=10)
+        # self.radar_back = Radar(port="/dev/ttyAS2", baudrate=115200, max_history=10)
+        # self.gps = GPS(port="/dev/ttyAS4", baudrate=9600, max_history=10)
 
         # # Hardware Actuators (with fallback built-in inside the modules)
-        # self.actuator = LinearActuator(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
-        # self.vibrator_left = HapticVibrator(gpio_chip='/dev/gpiochip0', gpio_line=10, max_history=10)
-        # self.vibrator_right = HapticVibrator(gpio_chip='/dev/gpiochip0', gpio_line=11, max_history=10)
-        # self.speaker = HardwareSpeaker(max_history=10)
+        # self.actuator = Actuators(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
+        # self.vibrator_left = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=10, max_history=10)
+        # self.vibrator_right = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=11, max_history=10)
+        # self.speaker = Speaker(max_history=10)
 
         # Configure radar and cam to Bird's eye view (top down)
 

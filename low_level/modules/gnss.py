@@ -130,7 +130,7 @@ class GNSS:
         get_speed() instead.
         """
         try:
-            incoming = self._serial.read(256)
+            incoming = self._serial.read(256, timeout = 0.1)
             if incoming:
                 self._buf += incoming.decode("ascii", errors="ignore")
         except Exception:

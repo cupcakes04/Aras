@@ -61,7 +61,7 @@ class GPS(History):
     Integrated into system.py History structure.
     """
 
-    def __init__(self, port: str = '/dev/ttyS4', baudrate: int = 9600, **kwargs):
+    def __init__(self, port: str = '/dev/ttyAS4', baudrate: int = 9600, **kwargs):
         super().__init__(**kwargs)
         self.setup(port, baudrate)
 
@@ -92,7 +92,7 @@ class GPS(History):
 
         # Drain all available bytes from UART
         while True:
-            chunk = self._serial.read(256)
+            chunk = self._serial.read(256, timeout = 0.1)
             if not chunk:
                 break
             try:

@@ -167,7 +167,7 @@ class Radar:
         'snr'       : int  — signal-to-noise ratio (0-255)
         """
         try:
-            incoming = self._serial.read(256)
+            incoming = self._serial.read(256, timeout = 0.1)
             if incoming:
                 self._buf += incoming
         except Exception:
@@ -456,7 +456,7 @@ class Radar:
         try:
             while time.monotonic() < deadline:
                 try:
-                    chunk = self._serial.read(64)
+                    chunk = self._serial.read(64, timeout = 0.05)
                 except Exception:
                     chunk = b""
                 if chunk:
