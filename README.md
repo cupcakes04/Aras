@@ -34,9 +34,12 @@ Aras is an Advanced Rider Assistance System (ARAS) designed to improve motorcycl
 ### Radxa Object Detection Setup
 To build and install the AI SDK for object detection on the Radxa platform:
 ```bash
+# quantisize
 make AI_SDK_PLATFORM=a733
 make install AI_SDK_PLATFORM=a733 INSTALL_PREFIX=./
+# export and allow permission
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/rock/ai-sdk/viplite-tina/lib/aarch64-none-linux-gnu/v2.0
+chmod +x ./yolov5
 ```
 
 ### Software Dependencies

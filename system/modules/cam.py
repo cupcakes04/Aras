@@ -107,8 +107,8 @@ class Camera(History):
         self.MODEL_PATH = "./model/v3/yolov5.nb"
         
         # Create input directory if it doesn't exist
-        self.IMAGE_PATH = os.path.join(SCRIPT_DIR, "./input_data/cur_frame.jpg") 
-        self.RES_PATH = os.path.join(YOLO_SCRIPT, "./results.json") 
+        self.IMAGE_PATH = os.path.join(self.SCRIPT_DIR, "./input_data/cur_frame.jpg") 
+        self.RES_PATH = os.path.join(self.YOLO_SCRIPT, "./results.json") 
 
     def close(self):
         if self._hardware_available and hasattr(self, 'cap'):

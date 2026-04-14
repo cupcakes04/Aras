@@ -73,8 +73,6 @@ gst_str_2 = (
 
 gst_str = gst_str_1
 
-save_path = "./input_data/cur_frame.jpg"
-
 cap = cv2.VideoCapture(gst_str, cv2.CAP_GSTREAMER)
 
 
@@ -102,7 +100,7 @@ try:
         print(frame.shape, frame.max(), frame.min())
         # Save the frame for YOLOv5 to pick up
         # frame = frame[:, :, [0, 2, 1]]
-        cv2.imwrite(save_path, frame)
+        cv2.imwrite(IMAGE_PATH, frame)
 
         # # Run YOLO with the correct Working Directory
         result = subprocess.run(

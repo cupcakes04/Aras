@@ -37,7 +37,7 @@ class System:
             self.config = yaml.safe_load(f)
 
         # Debug use
-        self.camera = CameraOld(max_history=10, demo=False, config=self.config)
+        # self.camera = CameraOld(max_history=10, demo=False, config=self.config)
         self.imu = IMU(max_history=10)
         # self.radar_front = RadarOld(max_history=10)
         # self.radar_back = RadarOld(max_history=10)
@@ -48,7 +48,7 @@ class System:
         self.speaker = SpeakerOld(max_history=10)
 
         # # Sensors
-        # self.camera = Camera(max_history=10, config=self.config)
+        self.camera = Camera(max_history=10, config=self.config)
         # self.imu = IMU(max_history=10)
         self.radar_front = Radar(port="/dev/ttyAS3", baudrate=115200, max_history=10)
         self.radar_back = Radar(port="/dev/ttyAS2", baudrate=115200, max_history=10)

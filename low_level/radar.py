@@ -10,7 +10,7 @@ from periphery import Serial
 HDR = bytes([0xF4, 0xF3, 0xF2, 0xF1])
 TAIL = bytes([0xF8, 0xF7, 0xF6, 0xF5])
 MAX_PAYLOAD = 128
-DEVTTY = "/dev/ttyAS4"
+DEVTTY = "/dev/ttyAS3"
 
 class ParseState:
     WAIT_HEADER = 0
