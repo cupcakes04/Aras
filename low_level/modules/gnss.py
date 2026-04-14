@@ -130,27 +130,31 @@ class GNSS:
         get_speed() instead.
         """
         try:
-            incoming = self._serial.read(256, timeout = 0.1)
+            incoming = self._serial.read(256, timeout=0.1)
             if incoming:
                 self._buf += incoming.decode("ascii", errors="ignore")
         except Exception:
             pass
 
-        # Extract one complete NMEA sentence (terminated by \n)
-        newline = self._buf.find("\n")
-        if newline == -1:
-            return None
+        # Drain ALL complete sentences so the buffer never accumulates a backlog.
+        # The cache is updated for every sentence; last_sentence holds the most
+        # recent one for callers that want the raw string.
+        last_sentence = None
+        while True:
+            newline = self._buf.find("\n")
+            if newline == -1:
+                break
 
-        sentence = self._buf[:newline].strip()
-        self._buf = self._buf[newline + 1:]
+            sentence = self._buf[:newline].strip()
+            self._buf = self._buf[newline + 1:]
 
-        if not sentence.startswith("$"):
-            return None
+            if not sentence.startswith("$"):
+                continue
 
-        # Parse with pynmea2 and update cache
-        self._parse_sentence(sentence)
+            self._parse_sentence(sentence)
+            last_sentence = sentence
 
-        return sentence
+        return last_sentence
 
     def get_current_location(self) -> dict:
         """

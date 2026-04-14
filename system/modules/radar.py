@@ -4,6 +4,10 @@ import time
 from collections import deque
 from .history import History
 
+import struct
+import time
+from periphery import Serial
+
 class RadarOld(History):
     """
     Radar
@@ -183,12 +187,12 @@ class Radar(History):
         """
         if not self._hardware_available:
             # Provide dummy targets if hardware missing
-            value = [
-                {'angle': 0, 'distance': 12.0, 'direction': True, 'speed': 15.0, 'snr': 0.85},
-                {'angle': -15, 'distance': 8.0, 'direction': True, 'speed': 5.0, 'snr': 0.7},
-                {'angle': 20, 'distance': 15.0, 'direction': False, 'speed': 20.0, 'snr': 0.6}
-            ]
-            self.save_history(value)
+            # value = [
+            #     {'angle': 0, 'distance': 12.0, 'direction': True, 'speed': 15.0, 'snr': 0.85},
+            #     {'angle': -15, 'distance': 8.0, 'direction': True, 'speed': 5.0, 'snr': 0.7},
+            #     {'angle': 20, 'distance': 15.0, 'direction': False, 'speed': 20.0, 'snr': 0.6}
+            # ]
+            # self.save_history(value)
             return
 
         latest_targets = None

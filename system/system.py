@@ -1,5 +1,5 @@
 import asyncio
-# from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
+from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
 from modules import WARN_EMERGENCY_BRAKING, WARN_FCW, WARN_RCW, CameraOld, IMU, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
 from BEV import BEV
 from tracker import TrackManager
@@ -37,11 +37,11 @@ class System:
             self.config = yaml.safe_load(f)
 
         # Debug use
-        self.camera = CameraOld(max_history=10, config=self.config)
+        self.camera = CameraOld(max_history=10, demo=False, config=self.config)
         self.imu = IMU(max_history=10)
-        self.radar_front = RadarOld(max_history=10)
-        self.radar_back = RadarOld(max_history=10)
-        self.gps = GPSOld(max_history=10)
+        # self.radar_front = RadarOld(max_history=10)
+        # self.radar_back = RadarOld(max_history=10)
+        # self.gps = GPSOld(max_history=10)
         self.actuator = ActuatorOld(max_history=10)
         self.vibrator_left = VibratorOld(max_history=10)
         self.vibrator_right = VibratorOld(max_history=10)
@@ -50,9 +50,10 @@ class System:
         # # Sensors
         # self.camera = Camera(max_history=10, config=self.config)
         # self.imu = IMU(max_history=10)
-        # self.radar_front = Radar(port="/dev/ttyAS3", baudrate=115200, max_history=10)
-        # self.radar_back = Radar(port="/dev/ttyAS2", baudrate=115200, max_history=10)
-        # self.gps = GPS(port="/dev/ttyAS4", baudrate=9600, max_history=10)
+        self.radar_front = Radar(port="/dev/ttyAS3", baudrate=115200, max_history=10)
+        self.radar_back = Radar(port="/dev/ttyAS2", baudrate=115200, max_history=10)
+        self.gps = GPS(port="/dev/ttyAS4", baudrate=9600, max_history=10)
+        print('done setup')
 
         # # Hardware Actuators (with fallback built-in inside the modules)
         # self.actuator = Actuators(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
