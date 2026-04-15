@@ -114,9 +114,97 @@ class Camera(History):
         if self._hardware_available and hasattr(self, 'cap'):
             self.cap.release()
 
-    async def read(self):
+    # async def read(self):
+    #     if not self._hardware_available:
+    #         # Fallback to dummy data
+    #         value = {'objs': [], 'signs': []}
+    #         self.save_history(value)
+    #         return
+
+    #     ret, frame = self.cap.read()
+    #     if not ret:
+    #         self.save_history({'objs': [], 'signs': []})
+    #         return
+
+    #     # Save frame for YOLO
+    #     cv2.imwrite(self.IMAGE_PATH, frame)
+
+    #     # Run YOLO synchronously (this might block asyncio, consider run_in_executor in production)
+    #     try:
+    #         subprocess.run(
+    #             [self.YOLO_EXE, self.MODEL_PATH, self.IMAGE_PATH],
+    #             cwd=self.YOLO_SCRIPT,
+    #             capture_output=True,
+    #             text=True
+    #         )
+            
+    #         with open(self.RES_PATH) as f:
+    #             raw_results = json.load(f)
+                
+    #         # Process results into standardized format
+    #         objs = []
+    #         signs = []
+            
+    #         for res in raw_results:
+    #             label_name = res['label']
+    #             # Map label string to ID
+    #             class_id = 7 # default misc
+    #             is_sign = False
+                
+    #             for k, v in self.objs_class_map.items():
+    #                 if v == label_name:
+    #                     class_id = k
+    #                     break
+    #             for k, v in self.signs_class_map.items():
+    #                 if v == label_name:
+    #                     class_id = k
+    #                     is_sign = True
+    #                     break
+                        
+    #             box = res['box']
+    #             x, y, w, h = box['x'], box['y'], box['w'], box['h']
+                
+    #             item = {
+    #                 'class': class_id,
+    #                 'name': label_name,
+    #                 'bbox': [x, y, x+w, y+h],
+    #                 'confidence': res['confidence']
+    #             }
+                
+    #             if is_sign:
+    #                 signs.append(item)
+    #             else:
+    #                 objs.append(item)
+                
+    #         value = {'objs': objs, 'signs': signs}
+            
+    #     except Exception as e:
+    #         print(f"[Camera] Inference error: {e}")
+    #         value = {'objs': [], 'signs': []}
+
+    #     self.save_history(value)
+    def _annotate_frame(self, frame, objs, signs):
+        annotated = frame.copy()
+        
+        for item in objs + signs:
+            x1, y1, x2, y2 = item['bbox']
+            is_sign = item in signs
+            color = (0, 165, 255) if is_sign else (0, 255, 0)  # orange for signs, green for objs
+            
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+            
+            label = f"{item['name']} {item['confidence']:.2f}"
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            
+            # Background rect for readability
+            cv2.rectangle(annotated, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
+            cv2.putText(annotated, label, (x1 + 2, y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+        
+        return annotated
+
+    async def read(self, annotate=True):
         if not self._hardware_available:
-            # Fallback to dummy data
             value = {'objs': [], 'signs': []}
             self.save_history(value)
             return
@@ -126,10 +214,8 @@ class Camera(History):
             self.save_history({'objs': [], 'signs': []})
             return
 
-        # Save frame for YOLO
         cv2.imwrite(self.IMAGE_PATH, frame)
 
-        # Run YOLO synchronously (this might block asyncio, consider run_in_executor in production)
         try:
             subprocess.run(
                 [self.YOLO_EXE, self.MODEL_PATH, self.IMAGE_PATH],
@@ -137,47 +223,47 @@ class Camera(History):
                 capture_output=True,
                 text=True
             )
-            
+
             with open(self.RES_PATH) as f:
                 raw_results = json.load(f)
-                
-            # Process results into standardized format
-            objs = []
-            signs = []
-            
+
+            objs, signs = [], []
             for res in raw_results:
                 label_name = res['label']
-                # Map label string to ID
-                class_id = 7 # default misc
+                class_id = None
                 is_sign = False
-                
+
                 for k, v in self.objs_class_map.items():
                     if v == label_name:
                         class_id = k
                         break
-                for k, v in self.signs_class_map.items():
-                    if v == label_name:
-                        class_id = k
-                        is_sign = True
-                        break
-                        
+                if class_id is None:
+                    for k, v in self.signs_class_map.items():
+                        if v == label_name:
+                            class_id = k
+                            is_sign = True
+                            break
+
+                if class_id is None:
+                    continue  # not in either map — bottle, chair, etc. get dropped here
+
                 box = res['box']
-                x, y, w, h = box['x'], box['y'], box['w'], box['h']
-                
+                x, y, w, h = int(box['x']), int(box['y']), int(box['w']), int(box['h'])  # cast to int
                 item = {
                     'class': class_id,
                     'name': label_name,
-                    'bbox': [x, y, x+w, y+h],
+                    'bbox': [x, y, x + w, y + h],
                     'confidence': res['confidence']
                 }
+                (signs if is_sign else objs).append(item)
                 
-                if is_sign:
-                    signs.append(item)
-                else:
-                    objs.append(item)
-                
+            if annotate:
+                annotated = self._annotate_frame(frame, objs, signs)
+                ann_path = self.IMAGE_PATH.replace('.jpg', '_annotated.jpg')
+                cv2.imwrite(ann_path, annotated)
+
             value = {'objs': objs, 'signs': signs}
-            
+
         except Exception as e:
             print(f"[Camera] Inference error: {e}")
             value = {'objs': [], 'signs': []}

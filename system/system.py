@@ -43,9 +43,9 @@ class System:
         # self.radar_back = RadarOld(max_history=10)
         # self.gps = GPSOld(max_history=10)
         self.actuator = ActuatorOld(max_history=10)
-        self.vibrator_left = VibratorOld(max_history=10)
-        self.vibrator_right = VibratorOld(max_history=10)
-        self.speaker = SpeakerOld(max_history=10)
+        # self.vibrator_left = VibratorOld(max_history=10)
+        # self.vibrator_right = VibratorOld(max_history=10)
+        # self.speaker = SpeakerOld(max_history=10)
 
         # # Sensors
         self.camera = Camera(max_history=10, config=self.config)
@@ -57,9 +57,9 @@ class System:
 
         # # Hardware Actuators (with fallback built-in inside the modules)
         # self.actuator = Actuators(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
-        # self.vibrator_left = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=10, max_history=10)
-        # self.vibrator_right = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=11, max_history=10)
-        # self.speaker = Speaker(max_history=10)
+        self.vibrator_left = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=325, max_history=10)
+        self.vibrator_right = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=326, max_history=10)
+        self.speaker = Speaker(max_history=10)
 
         # Configure radar and cam to Bird's eye view (top down)
 

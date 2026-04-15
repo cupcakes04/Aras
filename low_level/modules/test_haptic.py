@@ -1,11 +1,12 @@
 import time
 from haptic import Haptic
 
-left_haptic  = Haptic('/dev/gpiochip0', 323) #PK3
-right_haptic = Haptic('/dev/gpiochip0', 324) #PK4
+left_haptic  = Haptic('/dev/gpiochip0', 325) #PK5
+right_haptic = Haptic('/dev/gpiochip0', 326) #PK6
 
 # When a warning triggers
 while True:
+    print('fk u')
     left_haptic.on()
     time.sleep(3)
     right_haptic.on()
