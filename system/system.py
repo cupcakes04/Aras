@@ -12,14 +12,14 @@ import os
 # ==============================================================================
 # Fusion
 FUSION_MATCH_DIST = 1.0          # Max distance (m) to fuse camera & radar detections
-CAM_ONLY_CONFIDENCE = 0.4        # Base confidence for camera-only detections
+CAM_ONLY_CONFIDENCE = 0.8        # Base confidence for camera-only detections
 RADAR_CONFIDENCE_BOOST = 1.2     # Multiplier to boost radar confidence if camera matches
 SIGN_CONFIDENCE = 0.7            # Fixed confidence for traffic signs
 MIN_CONFIDENCE_TRACK = 0.3       # Minimum confidence to process an object in collision logic
 
 # Collision Detection (TTC & Corridors)
 LANE_HALF_WIDTH = 1.0            # Width (m) either side of the bike to check for collisions
-TTC_THRESHOLD = 2.0              # Seconds to collision before triggering alert
+TTC_THRESHOLD = 5.0              # Seconds to collision before triggering alert
 MIN_BRAKE_SPEED_KMH = 5.0        # Min ego speed (km/h) to allow auto-braking
 MAX_BRAKE_SPEED_KMH = 50.0       # Max ego speed (km/h) to allow auto-braking
 # ==============================================================================
@@ -48,7 +48,7 @@ class System:
         # self.speaker = SpeakerOld(max_history=10)
 
         # # Sensors
-        self.camera = Camera(max_history=10, config=self.config)
+        self.camera = Camera(max_history=10, config=self.config, cam_device="/dev/video1")
         # self.imu = IMU(max_history=10)
         self.radar_front = Radar(port="/dev/ttyAS3", baudrate=115200, max_history=10)
         self.radar_back = Radar(port="/dev/ttyAS2", baudrate=115200, max_history=10)
@@ -101,6 +101,8 @@ class System:
             'vibrator_left': 0.0,
             'vibrator_right': 0.0
         }
+        self.current_ttc = 0
+
 
     async def report(self):
         print("\n" + "="*60)
@@ -132,6 +134,7 @@ class System:
         print(f"  Vibrator Left: {self._vibrator_left_cmd:.2f}")
         print(f"  Vibrator Right:{self._vibrator_right_cmd:.2f}")
         print(f"  Speaker:       {self._speaker_cmd or 'None'}")
+        print(f"  Current TTC:   {self.current_ttc:.2f}")
         print("="*60)
 
 
@@ -314,20 +317,31 @@ class System:
         else:
             self._actuator_cmd = False
 
-        if front_collision:
+        if back_collision:
+            self._vibrator_left_cmd  = 1
+            self._vibrator_right_cmd = 1
+            self._speaker_cmd = WARN_RCW
+        elif front_collision:
             # Intensity scales with urgency: lower TTC = higher intensity
             intensity = min(1.0, best_conf * (TTC_THRESHOLD / max(best_ttc, 0.1)))
-            self._vibrator_left_cmd  = intensity
-            self._vibrator_right_cmd = intensity
+            self._vibrator_left_cmd  = 1
+            self._vibrator_right_cmd = 1
             self._speaker_cmd = WARN_FCW
         else:
             self._vibrator_left_cmd  = 0.0
             self._vibrator_right_cmd = 0.0
-            self._speaker_cmd = WARN_RCW if back_collision else None
+            self._speaker_cmd = None
+        self.current_ttc = best_ttc
 
         # Store annotated tracked objects for visualisation broadcast
         self.tracked_objects = tracked_objects
 
+
+    async def _write_actuators(self):
+        await self.actuator.write(value=self._actuator_cmd)
+        await self.vibrator_left.write(value=self._vibrator_left_cmd)
+        await self.vibrator_right.write(value=self._vibrator_right_cmd)
+        await self.speaker.write(value=self._speaker_cmd)
 
     # |-------------------------------------------------------------|
     # |----------------------- Run system --------------------------|
@@ -361,11 +375,8 @@ class System:
             self.assign_task(self.collision_detector, period=0.05),
             self.assign_task(self.report, period=1.0),
 
-            # Outputs (lambda wrappers to pass current command values)
-            self.assign_task(self.actuator.write, value=self._actuator_cmd, period=0.05),
-            self.assign_task(self.vibrator_left.write, value=self._vibrator_left_cmd, period=0.05),
-            self.assign_task(self.vibrator_right.write, value=self._vibrator_right_cmd, period=0.05),
-            self.assign_task(self.speaker.write, value=self._speaker_cmd, period=0.05),
+            # Outputs — reads current command values each cycle
+            self.assign_task(self._write_actuators, period=0.05),
         ]
         await asyncio.gather(*tasks)
         

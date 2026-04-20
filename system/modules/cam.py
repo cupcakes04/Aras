@@ -131,12 +131,14 @@ class Camera(History):
 
     #     # Run YOLO synchronously (this might block asyncio, consider run_in_executor in production)
     #     try:
-    #         subprocess.run(
+    #         debug_res = subprocess.run(
     #             [self.YOLO_EXE, self.MODEL_PATH, self.IMAGE_PATH],
     #             cwd=self.YOLO_SCRIPT,
     #             capture_output=True,
     #             text=True
     #         )
+            
+    #         # print(f'[CAM]: {debug_res}')
             
     #         with open(self.RES_PATH) as f:
     #             raw_results = json.load(f)
@@ -217,12 +219,14 @@ class Camera(History):
         cv2.imwrite(self.IMAGE_PATH, frame)
 
         try:
-            subprocess.run(
+            debug_res = subprocess.run(
                 [self.YOLO_EXE, self.MODEL_PATH, self.IMAGE_PATH],
                 cwd=self.YOLO_SCRIPT,
                 capture_output=True,
                 text=True
             )
+            
+            # print(f'[CAMERA]: {debug_res}')
 
             with open(self.RES_PATH) as f:
                 raw_results = json.load(f)
