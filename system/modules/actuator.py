@@ -22,42 +22,43 @@ class ActuatorOld(History):
         self.save_history(value)
 
 
-# PWM frequency in Hz — 20 kHz is standard for BTS7960, above audible range
-_PWM_FREQUENCY = 20000
+# GPIO chip path
+_GPIO_CHIP  = "/dev/gpiochip0"
 
-# Max duty cycle (1.0 = 100%)
-_DUTY_CYCLE_MAX = 1.0
-_DUTY_CYCLE_OFF = 0.0
+# Pin numbe
+_EXTEND_PIN  = 323   # PK8 — extend direction
+_RETRACT_PIN = 324   # PK9 — retract direction
+
 
 class Actuator(History):
     """
     Driver for a linear actuator controlled by a BTS7960 H-bridge motor driver.
 
-    Uses two PWM outputs (RPWM and LPWM) to extend or retract the actuator.
-    Only one PWM output is active at a time — the other is held at zero.
-    Duty cycle is fixed at 100% for both directions.
-    
+    Uses two GPIO outputs (EXTEND and RETRACT) to extend or retract the actuator.
+    Only one GPIO output is HIGH at a time — the other is held LOW.
+
     Integrated into system.py History structure.
+
+    States:
+      False (braking NOT engaged) — actuator extends to full length (EXTEND HIGH)
+      True  (braking engaged)     — actuator retracts to minimum length (RETRACT HIGH)
+                                    pulls the brake lever
     """
 
-    def __init__(self, rpwm_chip: int = 0, rpwm_channel: int = 0, lpwm_chip: int = 0, lpwm_channel: int = 1, **kwargs):
+    def __init__(self, gpio_chip = "/dev/gpiochip0", extend_pin=323, retract_pin=324, **kwargs):
         super().__init__(**kwargs)
-        self.setup(rpwm_chip, rpwm_channel, lpwm_chip, lpwm_channel)
-        
-    def setup(self, rpwm_chip: int, rpwm_channel: int, lpwm_chip: int, lpwm_channel: int):
-        try:
-            from periphery import PWM
-            # Initialise RPWM (extend)
-            self._rpwm = PWM(rpwm_chip, rpwm_channel)
-            self._rpwm.frequency  = _PWM_FREQUENCY
-            self._rpwm.duty_cycle = _DUTY_CYCLE_OFF
-            self._rpwm.enable()
+        self.setup(gpio_chip, extend_pin, retract_pin)
 
-            # Initialise LPWM (retract)
-            self._lpwm = PWM(lpwm_chip, lpwm_channel)
-            self._lpwm.frequency  = _PWM_FREQUENCY
-            self._lpwm.duty_cycle = _DUTY_CYCLE_OFF
-            self._lpwm.enable()
+    def setup(self, gpio_chip: str, extend_pin: int , retract_pin: int):
+        try:
+            from periphery import GPIO
+            self._extend  = GPIO(gpio_chip, extend_pin,  "out")
+            self._retract = GPIO(gpio_chip, retract_pin, "out")
+
+            # Ensure both pins start LOW
+            self._extend.write(False)
+            self._retract.write(False)
+
             self._hardware_available = True
         except Exception as e:
             print(f"[Actuator] Hardware init failed: {e}. Running in dummy mode.")
@@ -71,42 +72,52 @@ class Actuator(History):
             self._set_braking_hw(False)
 
     def close(self):
+        """Stop the actuator and release GPIO resources."""
         if not self._hardware_available:
             return
         self._set_braking_hw(False)
-        self._rpwm.duty_cycle = _DUTY_CYCLE_OFF
-        self._lpwm.duty_cycle = _DUTY_CYCLE_OFF
-        self._rpwm.disable()
-        self._lpwm.disable()
-        self._rpwm.close()
-        self._lpwm.close()
-    
+        self._extend.write(False)
+        self._retract.write(False)
+        self._extend.close()
+        self._retract.close()
+
     def keep_pos(self):
+        """Hold current position by setting both pins LOW."""
         if not self._hardware_available:
             return
-        self._rpwm.duty_cycle = _DUTY_CYCLE_OFF
-        self._lpwm.duty_cycle = _DUTY_CYCLE_OFF
+        self._extend.write(False)
+        self._retract.write(False)
 
     def _set_braking_hw(self, engage: bool) -> None:
+        """
+        Internal hardware method to engage or disengage braking.
+
+        Repeated calls with the same state are ignored.
+        """
         if engage == self._braking:
             return
 
         if engage:
-            # Retract — LPWM active, RPWM off
-            self._rpwm.duty_cycle = _DUTY_CYCLE_OFF
-            self._lpwm.duty_cycle = _DUTY_CYCLE_MAX
+            # Retract — RETRACT HIGH, EXTEND LOW
+            self._extend.write(False)
+            self._retract.write(True)
         else:
-            # Extend — RPWM active, LPWM off
-            self._lpwm.duty_cycle = _DUTY_CYCLE_OFF
-            self._rpwm.duty_cycle = _DUTY_CYCLE_MAX
+            # Extend — EXTEND HIGH, RETRACT LOW
+            self._retract.write(False)
+            self._extend.write(True)
 
         self._braking = engage
 
     async def write(self, value: bool):
         """
-        value: True = engage emergency braking, False = disengage
+        Engage or disengage emergency braking via the linear actuator.
+
+        Parameters
+        ----------
+        value : bool
+            True  — engage emergency braking (retract actuator, pull brake lever)
+            False — disengage emergency braking (extend actuator, release lever)
         """
         if self._hardware_available:
             self._set_braking_hw(value)
         self.save_history(value)
-

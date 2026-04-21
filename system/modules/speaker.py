@@ -38,6 +38,7 @@ class SpeakerOld(History):
 WARN_FCW               = "fcw"
 WARN_RCW               = "rcw"
 WARN_EMERGENCY_BRAKING = "emergency_braking"
+WARN_BLIND_SPOT        = "blind_spot"
 
 # ---------------------------------------------------------------------------
 # Tone definitions for each warning
@@ -53,6 +54,10 @@ _WARN_TONES = {
     WARN_RCW: [                         # 2 medium beeps — caution
         (800, 0.2), (0, 0.15),
         (800, 0.2),
+    ],
+    WARN_BLIND_SPOT: [                  # 2 fast high-pitched beeps
+        (1200, 0.1), (0, 0.1),
+        (1200, 0.1),
     ],
     WARN_EMERGENCY_BRAKING: [           # 1 long continuous beep — critical
         (1500, 0.08), (0, 0.08),
@@ -100,6 +105,9 @@ class Speaker(History):
         self.stop()
 
     def play(self, warning: str) -> bool:
+        if self.is_playing and getattr(self, '_current_warning', None) == warning:
+            return True
+
         wav_data = self._wav_cache.get(warning)
         if wav_data is None:
             return False
@@ -107,6 +115,7 @@ class Speaker(History):
         self.stop()
 
         if not self._hardware_available:
+            self._current_warning = warning
             return True
 
         try:
@@ -118,6 +127,7 @@ class Speaker(History):
             )
             self._process.stdin.write(wav_data)
             self._process.stdin.close()
+            self._current_warning = warning
         except Exception as e:
             print(f"[Speaker] Failed to play: {e}")
             return False
@@ -125,6 +135,8 @@ class Speaker(History):
         return True
 
     def stop(self) -> None:
+        if getattr(self, '_current_warning', None) is not None:
+            self._current_warning = None
         if self._process is not None:
             self._process.terminate()
             try:

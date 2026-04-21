@@ -35,13 +35,13 @@ bev:
   # Trapezoid on the image corresponding to a rectangle on the ground in front of the camera
   # Top-left, Top-right, Bottom-right, Bottom-left
   # image_pts: [[220, 360], [420, 360], [540, 640], [100, 640]]
-  image_pts: [[168, 547], [280, 553], [287, 575], [152,571]]
+  image_pts: [[373, 448], [510, 454], [542, 485], [379, 478]]
   # Corresponding real-world coordinates (x, y) in metres relative to the bike (origin)
   # Bike is at (0,0), +y is forward, +x is right
   # Top-left (-2m right, 10m forward), Top-right (+2m right, 10m forward)
   # Bottom-right (+2m right, 2m forward), Bottom-left (-2m right, 2m forward)
   # world_pts: [[-2.0, 10.0], [2.0, 10.0], [2.0, 2.0], [-2.0, 2.0]]
-  world_pts: [[-0.5, 6.1], [0.42,6.1], [0.45, 5.1], [-0.53, 5.1]]  # Realistic camera intrinsic matrix for a 640x640 image
+  world_pts: [[0.13, 5.1], [1.13, 5.1], [1.13, 4.1], [0.13, 4.1]]  # Realistic camera intrinsic matrix for a 640x640 image
   # fx=600, fy=600, cx=320, cy=320
   camera_matrix: [
     [600.0, 0.0, 320.0], 

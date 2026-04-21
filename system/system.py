@@ -1,8 +1,8 @@
 import asyncio
 from modules import Camera, IMU, Radar, Actuator, Vibrator, Speaker, GPS
-from modules import WARN_EMERGENCY_BRAKING, WARN_FCW, WARN_RCW, CameraOld, IMU, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
+from modules import WARN_EMERGENCY_BRAKING, WARN_FCW, WARN_RCW, WARN_BLIND_SPOT, CameraOld, IMU, RadarOld, ActuatorOld, VibratorOld, SpeakerOld, GPSOld
 from BEV import BEV
-from tracker import TrackManager
+from tracker import TrackManager, Track
 from app.visualisation import Visualisation
 import yaml
 import os
@@ -11,17 +11,17 @@ import os
 # GLOBAL TUNING PARAMETERS
 # ==============================================================================
 # Fusion
-FUSION_MATCH_DIST = 1.0          # Max distance (m) to fuse camera & radar detections
-CAM_ONLY_CONFIDENCE = 0.8        # Base confidence for camera-only detections
-RADAR_CONFIDENCE_BOOST = 1.2     # Multiplier to boost radar confidence if camera matches
-SIGN_CONFIDENCE = 0.7            # Fixed confidence for traffic signs
-MIN_CONFIDENCE_TRACK = 0.3       # Minimum confidence to process an object in collision logic
+FUSION_MATCH_DIST = 1.0          # 1 Max distance (m) to fuse camera & radar detections
+CAM_ONLY_CONFIDENCE = 0.8        # 0.8 Base confidence for camera-only detections
+RADAR_CONFIDENCE_BOOST = 1.2     # 1.2 Multiplier to boost radar confidence if camera matches
+SIGN_CONFIDENCE = 0.7            # 0.7 Fixed confidence for traffic signs
+MIN_CONFIDENCE_TRACK = 0.3       # 0.3 Minimum confidence to process an object in collision logic
 
 # Collision Detection (TTC & Corridors)
-LANE_HALF_WIDTH = 1.0            # Width (m) either side of the bike to check for collisions
-TTC_THRESHOLD = 5.0              # Seconds to collision before triggering alert
-MIN_BRAKE_SPEED_KMH = 5.0        # Min ego speed (km/h) to allow auto-braking
-MAX_BRAKE_SPEED_KMH = 50.0       # Max ego speed (km/h) to allow auto-braking
+LANE_HALF_WIDTH = 1.0            # 1 Width (m) either side of the bike to check for collisions
+TTC_THRESHOLD = 5.0              # 5 Seconds to collision before triggering alert
+MIN_BRAKE_SPEED_KMH = 5.0        # 5 Min ego speed (km/h) to allow auto-braking
+MAX_BRAKE_SPEED_KMH = 50.0       # 50 Max ego speed (km/h) to allow auto-braking
 # ==============================================================================
 
 # https://github.com/cupcakes04/Aras
@@ -42,7 +42,7 @@ class System:
         # self.radar_front = RadarOld(max_history=10)
         # self.radar_back = RadarOld(max_history=10)
         # self.gps = GPSOld(max_history=10)
-        self.actuator = ActuatorOld(max_history=10)
+        # self.actuator = ActuatorOld(max_history=10)
         # self.vibrator_left = VibratorOld(max_history=10)
         # self.vibrator_right = VibratorOld(max_history=10)
         # self.speaker = SpeakerOld(max_history=10)
@@ -56,7 +56,7 @@ class System:
         print('done setup')
 
         # # Hardware Actuators (with fallback built-in inside the modules)
-        # self.actuator = Actuators(rpwm_chip=0, rpwm_channel=0, lpwm_chip=0, lpwm_channel=1, max_history=10)
+        self.actuator = Actuator(gpio_chip= "/dev/gpiochip0", extend_pin=323, retract_pin=324)
         self.vibrator_left = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=325, max_history=10)
         self.vibrator_right = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=326, max_history=10)
         self.speaker = Speaker(max_history=10)
@@ -164,6 +164,18 @@ class System:
         # Combine front and back radar targets
         radar_targets = radar_front + radar_back
 
+        # Store raw sensors for debug visualisation
+        self.raw_sensors = {
+            'camera_objs': camera_objs,
+            'camera_signs': camera_signs,
+            'radar_targets': radar_targets
+        }
+        
+        import time
+        camera_ticks = self.camera.history['ticks']
+        camera_tick = camera_ticks[-1] if camera_ticks else time.time()
+        cam_delay = max(0.0, time.time() - camera_tick)
+
         objects = []
         obj_id = 0
         matched_cam_indices = set()
@@ -175,6 +187,8 @@ class System:
                 continue  # Invalid detection
 
             rx, ry = radar['world_x'], radar['world_y']
+            vy_radar = Track._radar_vy(ry, radar.get('speed'), radar.get('direction'))
+            past_ry = ry - vy_radar * cam_delay
 
             best_match = None
             best_match_idx = None
@@ -184,7 +198,9 @@ class System:
                 if idx in matched_cam_indices:
                     continue
                 cx, cy = cam['world_x'], cam['world_y']
-                dist = ((rx - cx)**2 + (ry - cy)**2)**0.5
+                
+                # Match current radar using past position since camera is delayed
+                dist = ((rx - cx)**2 + (past_ry - cy)**2)**0.5
                 if dist < best_dist:
                     best_dist = dist
                     best_match = cam
@@ -192,7 +208,7 @@ class System:
 
             # Boost confidence if matched with camera
             confidence = min(1.0, snr * RADAR_CONFIDENCE_BOOST) if best_match else snr
-
+            
             obj = {
                 'id': obj_id,
                 'name': best_match.get('name', 'unknown') if best_match else 'unknown',
@@ -202,6 +218,7 @@ class System:
                 'cam_only': False,
                 'radar_speed': radar['speed'],
                 'radar_direction': radar['direction'],
+                'cam_delay': 0.0
             }
             objects.append(obj)
             obj_id += 1
@@ -213,7 +230,7 @@ class System:
         for idx, cam in enumerate(camera_objs):
             if idx in matched_cam_indices:
                 continue  # Already matched with radar
-            
+
             obj = {
                 'id': obj_id,
                 'name': cam.get('name', 'unknown'),
@@ -223,6 +240,7 @@ class System:
                 'cam_only': True,
                 'radar_speed': None,
                 'radar_direction': None,
+                'cam_delay': cam_delay
             }
             objects.append(obj)
             obj_id += 1
@@ -275,6 +293,8 @@ class System:
 
         front_collision = False
         back_collision  = False
+        blind_spot_left  = False
+        blind_spot_right = False
         best_ttc        = float('inf')
         best_conf       = 0.0
 
@@ -285,9 +305,18 @@ class System:
 
             obj['front_collision'] = False
             obj['back_collision']  = False
+            obj['blind_spot']      = False
 
             if conf < MIN_CONFIDENCE_TRACK:
                 continue
+
+            # Check for blind spot (outside the immediate lane but nearby)
+            if y < 0 and abs(y) < 3.0 and LANE_HALF_WIDTH < abs(x) < (LANE_HALF_WIDTH + 2.0):
+                obj['blind_spot'] = True
+                if x < 0:
+                    blind_spot_left = True
+                else:
+                    blind_spot_right = True
 
             # Only objects within the lane corridor (parallel lines, not a cone)
             if abs(x) > LANE_HALF_WIDTH:
@@ -327,6 +356,10 @@ class System:
             self._vibrator_left_cmd  = 1
             self._vibrator_right_cmd = 1
             self._speaker_cmd = WARN_FCW
+        elif blind_spot_left or blind_spot_right:
+            self._vibrator_left_cmd  = 1 if blind_spot_left else 0.0
+            self._vibrator_right_cmd = 1 if blind_spot_right else 0.0
+            self._speaker_cmd = WARN_BLIND_SPOT
         else:
             self._vibrator_left_cmd  = 0.0
             self._vibrator_right_cmd = 0.0
@@ -382,4 +415,10 @@ class System:
         
 if __name__ == "__main__":
     system = System()
-    asyncio.run(system.run())
+    try:
+        asyncio.run(system.run())
+    except KeyboardInterrupt:
+        print("\n[System] Received KeyboardInterrupt, shutting down gracefully...")
+    finally:
+        if hasattr(system, 'camera') and hasattr(system.camera, 'close'):
+            system.camera.close()

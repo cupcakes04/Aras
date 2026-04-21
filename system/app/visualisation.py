@@ -46,6 +46,9 @@ class Visualisation:
                 # Use annotated tracked objects (with collision flags) from collision_detector
                 tracks = getattr(self.system, 'tracked_objects', self.system.tracker.get_all_tracks())
                 signs = self.system.traffic_signs
+                
+                # Get raw sensors if available for debug UI
+                raw_sensors = getattr(self.system, 'raw_sensors', None)
 
                 # Latest GPS fix (None if no reading yet)
                 gps_history = self.system.gps.history.get('values', [])
@@ -55,6 +58,7 @@ class Visualisation:
                 data = {
                     'tracks': tracks,
                     'signs': signs,
+                    'raw_sensors': raw_sensors,
                     'gps': gps,
                     'timestamp': asyncio.get_event_loop().time(),
                     'config': self.config
@@ -92,7 +96,8 @@ class Visualisation:
     async def start(self, period=0.1):
         """Start the WebSocket server and broadcasting."""
         print(f"[Visualisation] Starting server on ws://0.0.0.0:{self.port}")
-        print(f"[Visualisation] Open app/index.html in browser to view")
+        print(f"[Visualisation] Open app/bev.html in browser to view tracking")
+        print(f"[Visualisation] Open app/sensor_debug.html in browser to view raw sensors")
         
         # Start WebSocket server
         self._server = await websockets.serve(self.handler, "0.0.0.0", self.port)

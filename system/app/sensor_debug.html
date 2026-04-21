@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARAS - Raw Sensor Debug</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #111; color: #fff; overflow: hidden;
+            display: flex; flex-direction: column; height: 100vh;
+        }
+        
+        .header {
+            padding: 15px 20px; background: #222;
+            border-bottom: 1px solid #444; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        
+        .title { font-size: 20px; font-weight: bold; color: #4CAF50; }
+        
+        .status-container { display: flex; gap: 20px; align-items: center; }
+        
+        .status-badge {
+            padding: 5px 12px; border-radius: 12px;
+            font-size: 12px; font-weight: bold;
+        }
+        .connected { background: rgba(76, 175, 80, 0.3); color: #4CAF50; border: 1px solid #4CAF50; }
+        .disconnected { background: rgba(244, 67, 54, 0.3); color: #f44336; border: 1px solid #f44336; }
+        
+        .main-content {
+            display: flex; flex: 1; overflow: hidden;
+        }
+        
+        .canvas-wrapper {
+            flex: 1; position: relative;
+            background: #0a0a0a; border-right: 1px solid #333;
+        }
+        
+        canvas {
+            display: block; width: 100%; height: 100%;
+        }
+        
+        .sidebar {
+            width: 350px; background: #1a1a1a;
+            display: flex; flex-direction: column;
+            border-left: 1px solid #333;
+        }
+        
+        .legend {
+            padding: 15px; border-bottom: 1px solid #333;
+        }
+        
+        .legend-item {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px;
+        }
+        
+        .color-box { width: 16px; height: 16px; border-radius: 4px; }
+        .cb-cam { background: #2196F3; }
+        .cb-rad { background: #FFC107; }
+        .cb-sign { background: #9C27B0; }
+        
+        .info-panel {
+            flex: 1; padding: 15px; overflow-y: auto;
+            font-family: monospace; font-size: 12px;
+            color: #aaa; white-space: pre-wrap;
+        }
+        
+        .stats {
+            padding: 10px 15px; background: #222; border-top: 1px solid #333;
+            display: flex; justify-content: space-between; font-size: 12px; color: #888;
+        }
+        
+        .controls {
+            position: absolute; bottom: 20px; left: 20px;
+            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px;
+            display: flex; gap: 10px;
+        }
+        
+        button {
+            background: #333; color: #fff; border: 1px solid #555;
+            padding: 6px 12px; border-radius: 4px; cursor: pointer;
+        }
+        
+        button:hover { background: #444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">ARAS Raw Sensor Debugger</div>
+        <div class="status-container">
+            <div id="rate">0 Hz</div>
+            <div id="status" class="status-badge disconnected">DISCONNECTED</div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="canvas-wrapper">
+            <canvas id="canvas"></canvas>
+            <div class="controls">
+                <button id="btn-zoom-in">Zoom In</button>
+                <button id="btn-zoom-out">Zoom Out</button>
+                <button id="btn-reset">Reset View</button>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="legend">
+                <div class="legend-item"><div class="color-box cb-cam"></div> Camera Objects (Blue)</div>
+                <div class="legend-item"><div class="color-box cb-rad"></div> Radar Targets (Yellow)</div>
+                <div class="legend-item"><div class="color-box cb-sign"></div> Traffic Signs (Purple)</div>
+                <div style="margin-top: 10px; font-size: 12px; color: #888;">
+                    * Bike is at center bottom.<br>
+                    * Radar velocity shown as vector line.<br>
+                    * Grid lines every 5 meters.
+                </div>
+            </div>
+            <div class="info-panel" id="raw-info">Waiting for data...</div>
+            <div class="stats" id="stats">
+                <span>Cam: 0</span>
+                <span>Rad: 0</span>
+                <span>Signs: 0</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let scale = 15; // pixels per meter
+        let panX = 0;
+        let panY = 0; // offset from bottom
+        
+        let isDragging = false;
+        let lastMouseX = 0, lastMouseY = 0;
+        
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            panX = canvas.width / 2;
+            panY = canvas.height - 50; // Bike near the bottom
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        
+        // Mouse controls
+        canvas.addEventListener('mousedown', e => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            panX += (e.clientX - lastMouseX);
+            panY += (e.clientY - lastMouseY);
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            draw(lastData);
+        });
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            scale *= zoomFactor;
+            draw(lastData);
+        });
+        
+        document.getElementById('btn-zoom-in').onclick = () => { scale *= 1.2; draw(lastData); };
+        document.getElementById('btn-zoom-out').onclick = () => { scale /= 1.2; draw(lastData); };
+        document.getElementById('btn-reset').onclick = () => { scale = 15; resize(); draw(lastData); };
+
+        let lastData = null;
+        let updateCount = 0;
+        let lastTime = Date.now();
+
+        function draw(data) {
+            if (!data) return;
+            
+            // Clear
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            // Vertical lines every 5m
+            for (let x = -50; x <= 50; x += 5) {
+                const px = panX + (x * scale);
+                ctx.moveTo(px, 0);
+                ctx.lineTo(px, canvas.height);
+            }
+            // Horizontal lines every 5m
+            for (let y = -20; y <= 100; y += 5) {
+                const py = panY - (y * scale);
+                ctx.moveTo(0, py);
+                ctx.lineTo(canvas.width, py);
+            }
+            ctx.stroke();
+            
+            // Draw axes
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(panX, 0); ctx.lineTo(panX, canvas.height); // Y axis
+            ctx.moveTo(0, panY); ctx.lineTo(canvas.width, panY); // X axis
+            ctx.stroke();
+            
+            // Draw Bike (Origin)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(panX, panY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            const raw = data.raw_sensors;
+            if (!raw) return;
+            
+            // Draw Camera Objs (Blue)
+            if (raw.camera_objs) {
+                ctx.fillStyle = 'rgba(33, 150, 243, 0.6)';
+                ctx.strokeStyle = '#2196F3';
+                raw.camera_objs.forEach(obj => {
+                    const cx = panX + (obj.world_x * scale);
+                    const cy = panY - (obj.world_y * scale);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 6, 0, Math.PI*2);
+                    ctx.fill(); ctx.stroke();
+                    
+                    ctx.fillStyle = '#2196F3';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(`${obj.name} (${obj.confidence.toFixed(2)})`, cx + 8, cy);
+                });
+            }
+            
+            // Draw Radar Targets (Yellow)
+            if (raw.radar_targets) {
+                ctx.fillStyle = 'rgba(255, 193, 7, 0.6)';
+                ctx.strokeStyle = '#FFC107';
+                raw.radar_targets.forEach(rad => {
+                    const cx = panX + (rad.world_x * scale);
+                    const cy = panY - (rad.world_y * scale);
+                    
+                    // Base point
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 5, 0, Math.PI*2);
+                    ctx.fill(); ctx.stroke();
+                    
+                    // Velocity vector (radar reports speed directly)
+                    if (rad.speed !== undefined) {
+                        // Assuming speed is radial. Direction: towards bike is negative usually? 
+                        // Actually in raw data: speed < 0 means approaching.
+                        // Let's just draw a line indicating direction
+                        const angle = Math.atan2(rad.world_y, rad.world_x); // Angle from origin to target
+                        const vscale = rad.speed * scale * 0.5; // Scale velocity for visibility
+                        const vx = -Math.cos(angle) * vscale; // Approaching means pointing towards origin
+                        const vy = Math.sin(angle) * vscale; // Screen Y is inverted
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(cx, cy);
+                        ctx.lineTo(cx + vx, cy + vy);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.fillStyle = '#FFC107';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(`SNR:${rad.snr.toFixed(1)} v:${rad.speed?.toFixed(1)}`, cx + 8, cy + 12);
+                });
+            }
+            
+            // Draw Traffic Signs (Purple)
+            if (raw.camera_signs) {
+                ctx.fillStyle = 'rgba(156, 39, 176, 0.6)';
+                ctx.strokeStyle = '#9C27B0';
+                raw.camera_signs.forEach(sign => {
+                    const cx = panX + (sign.world_x * scale);
+                    const cy = panY - (sign.world_y * scale);
+                    ctx.beginPath();
+                    // Draw square for sign
+                    ctx.rect(cx - 5, cy - 5, 10, 10);
+                    ctx.fill(); ctx.stroke();
+                    
+                    ctx.fillStyle = '#9C27B0';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(`${sign.name} (${sign.confidence.toFixed(2)})`, cx + 8, cy);
+                });
+            }
+        }
+        
+        function updateInfoPanel(raw) {
+            const panel = document.getElementById('raw-info');
+            if (!raw) {
+                panel.textContent = "No raw sensor data available.";
+                return;
+            }
+            
+            let html = "=== RAW SENSOR DUMP ===\n\n";
+            
+            html += `[ CAMERA OBJECTS (${raw.camera_objs ? raw.camera_objs.length : 0}) ]\n`;
+            if (raw.camera_objs) {
+                raw.camera_objs.forEach((o, i) => {
+                    html += ` ${i}. ${o.name.padEnd(8)} | Pos: (${o.world_x.toFixed(2)}, ${o.world_y.toFixed(2)})\n`;
+                    html += `    Conf: ${o.confidence.toFixed(2)} | BBox: [${o.bbox}]\n`;
+                });
+            }
+            
+            html += `\n[ RADAR TARGETS (${raw.radar_targets ? raw.radar_targets.length : 0}) ]\n`;
+            if (raw.radar_targets) {
+                raw.radar_targets.forEach((r, i) => {
+                    html += ` ${i}. SNR: ${r.snr.toFixed(1).padEnd(4)} | Pos: (${r.world_x.toFixed(2)}, ${r.world_y.toFixed(2)})\n`;
+                    html += `    Spd: ${r.speed !== undefined ? r.speed.toFixed(2) : 'N/A'} m/s | Dist: ${r.dist !== undefined ? r.dist.toFixed(2) : 'N/A'}m\n`;
+                });
+            }
+            
+            html += `\n[ CAMERA SIGNS (${raw.camera_signs ? raw.camera_signs.length : 0}) ]\n`;
+            if (raw.camera_signs) {
+                raw.camera_signs.forEach((s, i) => {
+                    html += ` ${i}. ${s.name.padEnd(10)} | Pos: (${s.world_x.toFixed(2)}, ${s.world_y.toFixed(2)})\n`;
+                    html += `    Conf: ${s.confidence.toFixed(2)}\n`;
+                });
+            }
+            
+            panel.textContent = html;
+            
+            // Update stats
+            document.getElementById('stats').innerHTML = `
+                <span>Cam: ${raw.camera_objs ? raw.camera_objs.length : 0}</span>
+                <span>Rad: ${raw.radar_targets ? raw.radar_targets.length : 0}</span>
+                <span>Signs: ${raw.camera_signs ? raw.camera_signs.length : 0}</span>
+            `;
+        }
+
+        // WebSocket
+        function connect() {
+            const host = window.location.hostname || 'localhost';
+            const ws = new WebSocket(`ws://${host}:8765`);
+            
+            ws.onopen = () => {
+                const el = document.getElementById('status');
+                el.textContent = 'CONNECTED';
+                el.className = 'status-badge connected';
+            };
+            
+            ws.onclose = () => {
+                const el = document.getElementById('status');
+                el.textContent = 'DISCONNECTED';
+                el.className = 'status-badge disconnected';
+                setTimeout(connect, 2000);
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                lastData = data;
+                
+                draw(data);
+                updateInfoPanel(data.raw_sensors);
+                
+                // Rate
+                updateCount++;
+                const now = Date.now();
+                if (now - lastTime > 1000) {
+                    const r = updateCount / ((now - lastTime) / 1000);
+                    document.getElementById('rate').textContent = `${r.toFixed(1)} Hz`;
+                    updateCount = 0;
+                    lastTime = now;
+                }
+            };
+        }
+        
+        connect();
+    </script>
+</body>
+</html>

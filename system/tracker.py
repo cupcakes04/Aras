@@ -6,14 +6,14 @@ from scipy.optimize import linear_sum_assignment
 # ==============================================================================
 # GLOBAL TUNING PARAMETERS
 # ==============================================================================
-KALMAN_DT = 0.05                 # Time step in seconds (e.g., 0.05 = 20Hz)
-KALMAN_PROCESS_NOISE_Q = 0.5     # Process noise magnitude (acceleration variance)
-KALMAN_MEASURE_NOISE_R = 0.3     # Measurement noise covariance in metres
-RADAR_VELOCITY_ALPHA = 0.3       # Alpha filter weight for blending radar speed (0.0 to 1.0)
-TRACK_CONFIRM_HITS = 3           # Number of consecutive hits to confirm a track
-TRACK_DELETE_MISSES = 5          # Number of consecutive misses to delete a track
-TRACK_CONFIDENCE_DECAY = 0.9     # Multiplier to decay confidence on a missed frame
-TRACK_MAX_DISTANCE = 2.0         # Maximum Euclidean distance (m) for Hungarian assignment
+KALMAN_DT = 0.05                 # 0.05 Time step in seconds (e.g., 0.05 = 20Hz)
+KALMAN_PROCESS_NOISE_Q = 0.5     # 0.5 Process noise magnitude (acceleration variance)
+KALMAN_MEASURE_NOISE_R = 0.3     # 0.3 Measurement noise covariance in metres
+RADAR_VELOCITY_ALPHA = 0.3       # 0.3 Alpha filter weight for blending radar speed (0.0 to 1.0)
+TRACK_CONFIRM_HITS = 3           # 3 Number of consecutive hits to confirm a track
+TRACK_DELETE_MISSES = 5          # 5 Number of consecutive misses to delete a track
+TRACK_CONFIDENCE_DECAY = 0.9     # 0.9 Multiplier to decay confidence on a missed frame
+TRACK_MAX_DISTANCE = 2.0         # 2 Maximum Euclidean distance (m) for Hungarian assignment
 # ==============================================================================
 
 
@@ -165,7 +165,13 @@ class Track:
         detection : dict
             Detection with 'world_x', 'world_y', 'confidence', 'name', 'cam_only'
         """
-        z = np.array([detection['world_x'], detection['world_y']])
+        delay = detection.get('cam_delay', 0.0) if detection.get('cam_only') else 0.0
+        vx, vy = self.kf.x[2], self.kf.x[3]
+        
+        z = np.array([
+            detection['world_x'] + vx * delay,
+            detection['world_y'] + vy * delay
+        ])
         self.kf.update(z)
         
         # Update attributes
@@ -314,9 +320,11 @@ class TrackManager:
         cost_matrix = np.zeros((n_tracks, n_dets))
         for i, track in enumerate(self.tracks):
             tx, ty = track.get_position()
+            vx, vy = track.kf.x[2], track.kf.x[3]
             for j, det in enumerate(detections):
-                dx = tx - det['world_x']
-                dy = ty - det['world_y']
+                delay = det.get('cam_delay', 0.0) if det.get('cam_only') else 0.0
+                dx = tx - (det['world_x'] + vx * delay)
+                dy = ty - (det['world_y'] + vy * delay)
                 dist = np.sqrt(dx**2 + dy**2)
                 cost_matrix[i, j] = dist
                 

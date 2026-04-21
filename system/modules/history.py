@@ -12,6 +12,6 @@ class History:
         self.history['values'] = deque(maxlen=max_history)
         self.history['ticks'] = deque(maxlen=max_history)
         
-    def save_history(self, value):
+    def save_history(self, value, tick=None):
         self.history['values'].append(value)
-        self.history['ticks'].append(time.time())
+        self.history['ticks'].append(tick if tick is not None else time.time())

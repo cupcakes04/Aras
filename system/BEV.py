@@ -197,7 +197,7 @@ class BEV:
             })
         return results
 
-    def get_radar_world_points(self, mode: Literal['front', 'back']):
+    def get_radar_world_points(self, mode: Literal['front', 'back'], y_offset: float = 0.0):
         """
         Convert latest radar detections (angle/distance polar format) to flat-plane
         world (x, y) metres, corrected for roll/pitch tilt.
@@ -241,7 +241,7 @@ class BEV:
             results.append({
                 **t,
                 'world_x':   float(wx),
-                'world_y':   float(wy),
+                'world_y':   float(wy) + y_offset, # specifically for back radar
             })
         return results
 
@@ -254,7 +254,7 @@ class BEV:
         return {
             'camera':      self.get_camera_world_points(),
             'radar_front': self.get_radar_world_points('front'),
-            'radar_back':  self.get_radar_world_points('back'),
+            'radar_back':  self.get_radar_world_points('back', y_offset=0.85),
         }
 
 # |-------------------------------------------------------------|
@@ -262,7 +262,6 @@ class BEV:
 # |-------------------------------------------------------------|
 
 
-@staticmethod
 def calibrate_camera(image_paths: list, board_size: tuple = CALIB_BOARD_SIZE,
                      square_size_m: float = CALIB_SQUARE_SIZE_M,
                      show_corners: bool = False):
