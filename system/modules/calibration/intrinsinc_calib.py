@@ -87,7 +87,7 @@ def calibrate_camera(image_paths: list, board_size: tuple = CALIB_BOARD_SIZE,
     return camera_matrix, dist_coeffs, rms
 
 K, dist, rms = calibrate_camera(
-    image_paths=glob.glob('ch/*.jpg'),
+    image_paths=glob.glob('checkerboard/*.jpg'),
     board_size=(9, 6),
     square_size_m=0.025,
 )
