@@ -1,0 +1,10 @@
+{
+    "car": "car",
+    "van": "big car",
+    "truck": "big car",
+    "pedestrian": "people",
+    "person_sitting": "people",
+    "cyclist": "bicycle",
+    "tram": "misc",
+    "misc": "misc"
+}

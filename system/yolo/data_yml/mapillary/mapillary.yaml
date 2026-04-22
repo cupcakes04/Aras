@@ -1,0 +1,10 @@
+path: /mnt/d/DATASETS/mapillary
+train: train.txt
+val: val.txt
+
+nc: 4
+names:
+  0: other sign
+  1: speed limit
+  2: stop sign
+  3: traffic light

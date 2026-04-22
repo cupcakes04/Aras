@@ -1,0 +1,16 @@
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: /mnt/d/DATASETS/cars_signs
+train: train.txt
+val: val.txt
+
+names:
+  0: bicycle
+  1: bus
+  2: car
+  3: other sign
+  4: person
+  5: speed limit
+  6: stop sign
+  7: traffic light
+  8: tram
+  9: truck
