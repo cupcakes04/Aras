@@ -219,7 +219,7 @@ class BEV:
             y_sign = 1.0  # front is positive y
         elif mode == 'back':
             history = self._radar_back.history['values']
-            y_sign = -1.0  # back is negative y
+            y_sign = -1.0  # back is temporarily positive y
             
         if not history:
             return []

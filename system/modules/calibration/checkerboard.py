@@ -1,9 +1,11 @@
 
 
 import glob
+import numpy as np
+import cv2
                    # Small value to prevent division by zero
-CALIB_BOARD_SIZE = (9, 6)          # Default checkerboard inner corners (cols, rows)
-CALIB_SQUARE_SIZE_M = 0.025        # Default physical size of checkerboard square in metres
+CALIB_BOARD_SIZE = (4,6)          # Default checkerboard inner corners (cols, rows)
+CALIB_SQUARE_SIZE_M = 0.020        # Default physical size of checkerboard square in metres
 
 def calibrate_camera(image_paths: list, board_size: tuple = CALIB_BOARD_SIZE,
                      square_size_m: float = CALIB_SQUARE_SIZE_M,
@@ -49,6 +51,7 @@ def calibrate_camera(image_paths: list, board_size: tuple = CALIB_BOARD_SIZE,
     for path in image_paths:
         img  = cv2.imread(path)
         if img is None:
+            print('error: image not found')
             continue
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img_size = gray.shape[::-1]
@@ -84,7 +87,7 @@ def calibrate_camera(image_paths: list, board_size: tuple = CALIB_BOARD_SIZE,
     return camera_matrix, dist_coeffs, rms
 
 K, dist, rms = calibrate_camera(
-    image_paths=glob.glob('calib/*.jpg'),
+    image_paths=glob.glob('ch/*.jpg'),
     board_size=(9, 6),
     square_size_m=0.025,
 )

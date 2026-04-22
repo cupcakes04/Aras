@@ -19,7 +19,7 @@ MIN_CONFIDENCE_TRACK = 0.3       # 0.3 Minimum confidence to process an object i
 
 # Collision Detection (TTC & Corridors)
 LANE_HALF_WIDTH = 1.0            # 1 Width (m) either side of the bike to check for collisions
-TTC_THRESHOLD = 5.0              # 5 Seconds to collision before triggering alert
+TTC_THRESHOLD = 2.0              # 2 Seconds to collision before triggering alert
 MIN_BRAKE_SPEED_KMH = 5.0        # 5 Min ego speed (km/h) to allow auto-braking
 MAX_BRAKE_SPEED_KMH = 50.0       # 50 Max ego speed (km/h) to allow auto-braking
 # ==============================================================================

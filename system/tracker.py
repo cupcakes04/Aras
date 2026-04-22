@@ -146,7 +146,7 @@ class Track:
             return 0.0
         speed_ms = radar_speed / 3.6  # km/h -> m/s
         y_sign = 1.0 if world_y >= 0 else -1.0
-        if radar_direction is True:
+        if radar_direction is False: # TEMPORARILY INVERTED True/False here!
             return -y_sign * speed_ms  # approaching: closing velocity
         else:
             return y_sign * speed_ms   # receding: opening velocity
