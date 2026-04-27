@@ -50,6 +50,54 @@
             z-index: 100;
         }
         
+        #speed-panel {
+            position: absolute;
+            top: 20px;
+            left: 340px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 35px 15px 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        .speed-wrapper {
+            position: relative;
+            display: flex;
+            align-items: baseline;
+        }
+
+        .speed-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #fff;
+            margin-right: 4px;
+        }
+        
+        .speed-unit {
+            font-size: 14px;
+            color: #888;
+        }
+
+        .speed-limit-display {
+            position: absolute;
+            top: -16px;
+            right: -38px;
+            font-size: 15px;
+            font-weight: bold;
+            color: #000;
+            border: 4px solid #ff5252;
+            border-radius: 50%;
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3), 0 2px 6px rgba(0, 0, 0, 0.6);
+        }
+        
         #info-panel h2 {
             margin-bottom: 15px;
             color: #4CAF50;
@@ -413,6 +461,15 @@
             <div id="objects-list"></div>
         </div>
     </div>
+    
+    <div id="speed-panel">
+        <div class="speed-wrapper">
+            <div class="speed-display" id="current-speed">--</div>
+            <div class="speed-unit">km/h</div>
+            <div class="speed-limit-display" id="speed-limit">--</div>
+        </div>
+    </div>
+
     <div id="controls">
         <div class="control-group">
             <button id="toggle-mode" style="background: #2196F3;">Switch to 2D Mode</button>
@@ -1257,6 +1314,19 @@
                 container.style.display = 'none';
             }
         }
+
+        function updateSpeedPanel(gps) {
+            const speedEl = document.getElementById('current-speed');
+            const limitEl = document.getElementById('speed-limit');
+            
+            if (gps) {
+                speedEl.textContent = typeof gps.speed_kmh === 'number' ? Math.round(gps.speed_kmh) : '--';
+                limitEl.textContent = typeof gps.speed_limit === 'number' ? gps.speed_limit : '--';
+            } else {
+                speedEl.textContent = '--';
+                limitEl.textContent = '--';
+            }
+        }
         
         // Update collision warning UI (Right-side Panels & Blind Spots)
         function updateCollisionWarning(tracks) {
@@ -1373,6 +1443,7 @@
                 updateTopRightSign(data.signs || []);
                 updateInfoPanel(data.tracks, data.signs || []);
                 updateCollisionWarning(data.tracks || []);
+                updateSpeedPanel(data.gps);
                 
                 if (renderMode === '2d') {
                     draw2DScene(data.tracks, data.signs || []);

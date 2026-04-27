@@ -3,7 +3,7 @@ import time
 from gnss import GNSS, FIX_NONE
 
 # --- Initialize ---
-gnss = GNSS('/dev/ttyAS3', baudrate=9600)
+gnss = GNSS('/dev/ttyAS4', baudrate=9600)
 
 print("=============================")
 print("  ARAS GNSS Module Ready     ")

@@ -33,7 +33,8 @@ class GPSOld(History):
         value = {
             "latitude": 3.1390 + random.uniform(-0.0001, 0.0001),
             "longitude": 101.6869 + random.uniform(-0.0001, 0.0001),
-            "speed_kmh": 44.6 + random.uniform(-1.0, 1.0)
+            "speed_kmh": 44.6 + random.uniform(-1.0, 1.0),
+            "speed_limit": 60
         }
         self.save_history(value)
 
@@ -168,6 +169,7 @@ class GPS(History):
             "longitude": self._longitude,
             "speed_kmh": self._speed_kmh,
             "fix":       self._fix,
+            "speed_limit": 60  # Default or placeholder speed limit
         }
 
         self.save_history(value)

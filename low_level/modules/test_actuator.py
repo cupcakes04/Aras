@@ -22,7 +22,7 @@ try:
     while True:
         print("Engaging braking — actuator should retract...")
         actuator.set_braking(True)
-        time.sleep(1.8)
+        time.sleep(5)
 
         print("Disengaging braking — actuator should extend...")
         actuator.set_braking(False)

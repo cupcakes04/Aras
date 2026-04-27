@@ -2,6 +2,7 @@
 
 ![alt text](../../assets/dashboard.png)
 ![alt text](../../assets/2d_view.png)
+![Navigation](../../assets/navigation.png)
 ![alt text](../../assets/image_2.png)
 
 The ARAS Visualization Dashboard is a real-time, browser-based 3D Bird's-Eye-View (BEV) rendering of the environment tracked by the Advanced Rider Assistance System. It is built using Three.js and connects directly to the system's WebSocket server to visualize objects, speeds, collision statuses, and historical tracking trails.
@@ -20,6 +21,7 @@ The ARAS Visualization Dashboard is a real-time, browser-based 3D Bird's-Eye-Vie
 - **Diagnostic Information Panel**: An on-screen UI overlay displaying:
   - Total confirmed and tentative track counts.
   - Live system update frequency (Hz).
+  - Live ego vehicle speed (km/h) and current active speed limit.
   - Individual object breakdowns including assigned IDs, positions, radar/tracker velocities, and confidence scores.
 
 ## ⚙️ How it Works

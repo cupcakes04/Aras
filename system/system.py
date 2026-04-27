@@ -56,7 +56,7 @@ class System:
         print('done setup')
 
         # # Hardware Actuators (with fallback built-in inside the modules)
-        self.actuator = Actuator(gpio_chip= "/dev/gpiochip0", extend_pin=323, retract_pin=324)
+        self.actuator = Actuator(gpio_chip= "/dev/gpiochip0", extend_pin=323, retract_pin=324, forward_delay=3)
         self.vibrator_left = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=325, max_history=10)
         self.vibrator_right = Vibrator(gpio_chip='/dev/gpiochip0', gpio_line=326, max_history=10)
         self.speaker = Speaker(max_history=10)
@@ -422,3 +422,11 @@ if __name__ == "__main__":
     finally:
         if hasattr(system, 'camera') and hasattr(system.camera, 'close'):
             system.camera.close()
+        # if hasattr(system, 'actuator') and hasattr(system.actuator, 'close'):
+        #     system.actuator.close()
+        # if hasattr(system, 'vibrator_left') and hasattr(system.vibrator_left, 'close'):
+        #     system.vibrator_left.close()
+        # if hasattr(system, 'vibrator_right') and hasattr(system.vibrator_right, 'close'):
+        #     system.vibrator_right.close()
+        # if hasattr(system, 'speaker') and hasattr(system.speaker, 'close'):
+        #     system.speaker.close()

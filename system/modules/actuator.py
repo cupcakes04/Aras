@@ -28,7 +28,7 @@ _GPIO_CHIP  = "/dev/gpiochip0"
 # Pin numbe
 _EXTEND_PIN  = 323   # PK8 — extend direction
 _RETRACT_PIN = 324   # PK9 — retract direction
-
+FORWARD_DELAY = 1.8
 
 class Actuator(History):
     """
@@ -45,8 +45,10 @@ class Actuator(History):
                                     pulls the brake lever
     """
 
-    def __init__(self, gpio_chip = "/dev/gpiochip0", extend_pin=323, retract_pin=324, **kwargs):
+    def __init__(self, gpio_chip = "/dev/gpiochip0", extend_pin=323, retract_pin=324, forward_delay=FORWARD_DELAY, **kwargs):
         super().__init__(**kwargs)
+        self.forward_delay = forward_delay
+        self._cooldown_end = 0.0
         self.setup(gpio_chip, extend_pin, retract_pin)
 
     def setup(self, gpio_chip: str, extend_pin: int , retract_pin: int):
@@ -118,6 +120,17 @@ class Actuator(History):
             True  — engage emergency braking (retract actuator, pull brake lever)
             False — disengage emergency braking (extend actuator, release lever)
         """
+        current_time = time.time()
+        
+        # If we are in the cooldown period, ignore new commands
+        if current_time < self._cooldown_end:
+            self.save_history(self._braking)
+            return
+
         if self._hardware_available:
+            # If engaging the brake, start the delay cooldown
+            if value and not self._braking:
+                self._cooldown_end = current_time + self.forward_delay
             self._set_braking_hw(value)
+            
         self.save_history(value)

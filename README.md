@@ -1,8 +1,9 @@
 # Aras - Advanced Rider Assistance System
 
 ![alt text](./assets/dashboard.png)
+![Low Light Detection](./assets/low_light_obj_detection.jpg)
 
-Aras is an Advanced Rider Assistance System (ARAS) designed to improve motorcycle safety through multi-sensor fusion. By combining data from cameras, radars, and IMUs, it provides real-time collision warnings, spatial awareness, and navigation tracking in a unified 3D Bird's-Eye-View (BEV) environment.
+Aras is an Advanced Rider Assistance System (ARAS) designed to improve motorcycle safety through multi-sensor fusion. By combining data from cameras, radars, GPS, and IMUs, it provides real-time collision warnings, spatial awareness, and navigation tracking in a unified 3D Bird's-Eye-View (BEV) environment.
 
 ---
 
@@ -11,16 +12,19 @@ Aras is an Advanced Rider Assistance System (ARAS) designed to improve motorcycl
 ### 1. Multi-Sensor Fusion
 - **Camera Object Detection**: Utilizes YOLOv5 on an NPU to detect vehicles, pedestrians, and traffic signs in real-time.
 - **Dual Radar Tracking**: Front and rear mmWave radars provide highly accurate distance and velocity measurements (Doppler effect) independent of lighting conditions.
+- **GPS Speed Tracking**: Continuously monitors ego speed and current speed limits to dynamically scale threat responses and provide contextual visualization.
 - **IMU Tilt Correction**: Dynamically accounts for the motorcycle's lean angle (roll) and acceleration/braking tilt (pitch) to maintain an accurate world map.
 
 ### 2. Intelligent Threat Detection
 - **Time-To-Collision (TTC) Calculation**: Evaluates the closing speed of targets rather than just static distance, providing smarter and earlier warnings for fast-approaching hazards.
 - **Corridor Monitoring**: Filters out irrelevant objects (e.g., parked cars) by analyzing a strictly defined lane corridor ahead of and behind the bike.
+- **Out-of-Sequence Measurement (OOSM) Handling**: Tracks are seamlessly fused using historical latency projection to align fast radar signals with slower camera frame pipelines, eliminating target jitter.
 
 ### 3. Real-Time Haptic & Audio Feedback
 - **Directional Haptics**: Left and right haptic vibrators mounted on the handlebars pulse to indicate the direction and urgency of an impending threat.
 - **Dynamic Actuation**: Haptic intensity scales linearly with the proximity and speed of the incoming collision threat.
 - **Audio Warnings**: Triggers distinct Forward Collision Warnings (FCW) and Rear Collision Warnings (RCW) through an onboard speaker system.
+- **Graceful Hardware Management**: Ensures safe shutdown protocols for all connected actuators, vibrators, and speakers upon system interruption. Features configurable mechanical cooldown delays for the braking actuator to prevent rapid cycling.
 
 ### 4. 3D Web Visualization
 - Features a WebSocket-driven web dashboard displaying a top-down, 3D Bird's-Eye-View (BEV) of the bike's surroundings.
